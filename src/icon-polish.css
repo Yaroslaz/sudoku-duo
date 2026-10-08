@@ -9,13 +9,18 @@
   vertical-align: middle;
 }
 
-.app-bg :where(.mantine-ThemeIcon-root, .mantine-ActionIcon-root, .mantine-Button-section, .mantine-Alert-icon) svg,
-.app-bg button > svg,
-.app-bg [role='button'] > svg,
-.app-bg svg.tabler-icon {
+/* Center icons only inside dedicated icon wrappers. Do not touch arbitrary SVGs
+   inside flex controls such as dropdown chevrons. */
+.app-bg .mantine-ThemeIcon-root > svg,
+.app-bg .mantine-ActionIcon-root > svg,
+.app-bg .mantine-Button-section > svg,
+.app-bg .mantine-Alert-icon > svg,
+.app-bg .reference-connection > svg,
+.app-bg .history-button > svg,
+.app-bg .floating-hint-head > svg {
   display: block !important;
   flex: 0 0 auto !important;
-  margin: auto !important;
+  margin: 0 !important;
   position: static !important;
   inset: auto !important;
   vertical-align: middle !important;
@@ -58,7 +63,7 @@
 .reference-game .reference-header-action > svg,
 .reference-game .reference-tool > svg {
   position: static !important;
-  margin: auto !important;
+  margin: 0 !important;
 }
 
 .pairing-screen .mantine-Alert-icon {
