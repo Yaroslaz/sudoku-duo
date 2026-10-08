@@ -40,7 +40,6 @@
 .reference-game .sudoku-board.size-15 .notes-grid { font-size: clamp(.29rem, 1.15vw, .5rem); }
 .reference-game .sudoku-board.size-18 .notes-grid { font-size: clamp(.25rem, .95vw, .43rem); }
 
-/* All 1–9 stay visible at once. Larger symbol sets can scroll horizontally. */
 .reference-game .number-strip { position: relative; }
 .reference-game .number-strip.all-fit { overflow-x: hidden; gap: 0; }
 .reference-game .number-strip.all-fit .number-button { flex: 1 1 0; min-width: 0 !important; }
@@ -52,7 +51,6 @@
 .reference-game .number-strip.scrolling { gap: 2px; padding-inline: 4px; }
 .reference-game .number-strip.scrolling .number-button { flex: 0 0 52px; min-width: 52px !important; }
 
-/* Short celebration when one symbol is completely placed. */
 .completion-burst {
   position: absolute;
   left: 50%;
@@ -94,7 +92,6 @@
   100% { opacity: 0; transform: translate(var(--x), var(--y)) rotate(var(--r)) scale(.18); }
 }
 
-/* Smart hint docking: explanation sits opposite the highlighted cell. */
 .floating-hint {
   top: auto;
   bottom: max(calc(var(--safe-bottom) + 10px), 12px);
@@ -134,6 +131,27 @@
 }
 
 .floating-hint-body { min-height: 48px; padding-top: 4px; padding-bottom: 2px; }
+
+.room-code-card {
+  background: rgba(255, 255, 255, .78);
+}
+
+.room-code-text {
+  font-size: clamp(2rem, 10vw, 3.25rem);
+  line-height: 1;
+  letter-spacing: .12em;
+  font-variant-numeric: tabular-nums;
+  color: #244f86;
+  user-select: all;
+}
+
+.room-code-input input {
+  text-align: center;
+  font-size: 1.45rem;
+  font-weight: 750;
+  letter-spacing: .14em;
+  font-variant-numeric: tabular-nums;
+}
 
 @media (max-height: 700px) {
   .floating-hint { max-height: 180px; }
