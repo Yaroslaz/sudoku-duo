@@ -6,6 +6,7 @@ import {
   CopyButton,
   Group,
   Paper,
+  Select,
   SimpleGrid,
   Stack,
   Text,
@@ -67,7 +68,7 @@ export function PairingScreen({ initialName, initialColor, deviceId, reconnectMo
   const [localPlayer, setLocalPlayer] = useState<Player | null>(null);
   const sessionRef = useRef<PeerSession | null>(null);
   const handedOff = useRef(false);
-  const region = regionDimensions(size);
+  const difficultyData = difficulties.map((value) => ({ value, label: difficultyLabels[value] }));
 
   const changeColor = (next: PlayerColor) => {
     setColor(next);
@@ -198,24 +199,51 @@ export function PairingScreen({ initialName, initialColor, deviceId, reconnectMo
               </UnstyledButton>
             </SimpleGrid>
 
-            <Alert icon={<IconWifi size={18} />} color="gray" radius="lg">Оба телефона должны быть подключены к одной Wi‑Fi сети. У самой сети может не быть доступа в интернет.</Alert>
+            <Alert icon={<IconWifi size={18} />} color="gray" radius="lg">Оба телефона должны быть в одной Wi‑Fi сети.</Alert>
           </>
         )}
 
         {phase === 'host-settings' && (
           <>
-            <Stack gap={5}><Title order={2}>{reconnectMode ? 'Новое соединение' : 'Настрой игру'}</Title><Text c="dimmed">{reconnectMode ? 'Размер и сложность уже сохранены в партии.' : 'Выбери поле и сложность. Создание QR занимает не больше нескольких секунд.'}</Text></Stack>
+            <Stack gap={5}><Title order={2}>{reconnectMode ? 'Новое соединение' : 'Настрой игру'}</Title><Text c="dimmed">{reconnectMode ? 'Размер и сложность уже сохранены в партии.' : 'Выбери поле и сложность.'}</Text></Stack>
             {!reconnectMode && (
               <>
-                <Stack gap={7}>
+                <Stack gap="sm">
                   <Text fw={700}>Размер поля</Text>
-                  <SimpleGrid cols={4} spacing="xs">{boardSizes.map((value) => <Button key={value} variant={size === value ? 'light' : 'default'} color="indigo" radius="md" onClick={() => setSize(value)} aria-pressed={size === value}>{value}×{value}</Button>)}</SimpleGrid>
-                  <Text size="xs" c="dimmed">Блоки {region.rows}×{region.cols}. После 9 на больших полях используются буквы.</Text>
+                  <SimpleGrid cols={{ base: 2, xs: 4 }} spacing="sm" className="board-mode-grid">
+                    {boardSizes.map((value) => {
+                      const selected = size === value;
+                      const valueRegion = regionDimensions(value);
+                      return (
+                        <UnstyledButton key={value} onClick={() => setSize(value)} className="board-mode-button" aria-pressed={selected}>
+                          <Paper className={selected ? 'board-mode-card active' : 'board-mode-card'} radius="lg" p="sm" withBorder>
+                            <BoardSizeIllustration size={value} />
+                            <Text fw={750} className="board-mode-title">{value}×{value}</Text>
+                            <Text size="xs" c="dimmed">Блоки {valueRegion.rows}×{valueRegion.cols}</Text>
+                          </Paper>
+                        </UnstyledButton>
+                      );
+                    })}
+                  </SimpleGrid>
+                  <Text size="xs" c="dimmed">На больших полях после 9 используются буквы.</Text>
                 </Stack>
-                <SimpleGrid cols={{ base: 2, xs: 3 }} spacing="sm">{difficulties.map((key) => <UnstyledButton key={key} onClick={() => setDifficulty(key)} className="difficulty-choice"><Paper radius="lg" p="md" shadow="xs" className={difficulty === key ? 'difficulty-card active' : 'difficulty-card'}><Text fw={700}>{difficultyLabels[key]}</Text><Text size="xs" c="dimmed">{difficultyDescription(key)}</Text></Paper></UnstyledButton>)}</SimpleGrid>
+
+                <Stack gap="sm">
+                  <Text fw={700}>Сложность</Text>
+                  <Select
+                    data={difficultyData}
+                    value={difficulty}
+                    onChange={(value) => value && setDifficulty(value as Difficulty)}
+                    allowDeselect={false}
+                    size="md"
+                    radius="lg"
+                    className="difficulty-select"
+                  />
+                  <Text size="xs" c="dimmed">{difficultyDescription(difficulty)}</Text>
+                </Stack>
               </>
             )}
-            <Paper radius="xl" p="md" withBorder><Group gap="xs" align="flex-start" wrap="nowrap"><ThemeIcon variant="light" color="indigo" size="sm" radius="xl"><IconWifi size={14} /></ThemeIcon><Text size="sm" c="dimmed">Соединение локальное. Никаких PeerJS, STUN, TURN или облачного signaling.</Text></Group></Paper>
+            <Paper radius="xl" p="md" withBorder><Group gap="xs" align="center" wrap="nowrap"><ThemeIcon variant="light" color="indigo" size="sm" radius="xl"><IconWifi size={14} /></ThemeIcon><Text size="sm" c="dimmed">Локальное подключение между двумя телефонами.</Text></Group></Paper>
             <Button size="lg" radius="xl" leftSection={<IconQrcode size={19} />} onClick={() => void createRoom()} loading={peerState === 'gathering'}>Создать QR</Button>
           </>
         )}
@@ -263,6 +291,18 @@ export function PairingScreen({ initialName, initialColor, deviceId, reconnectMo
         {(phase === 'host-offer' || phase === 'host-answer' || phase === 'guest-offer' || phase === 'guest-answer') && <Alert icon={<IconInfoCircle size={17} />} color="gray" radius="lg">Если QR не читается, увеличь яркость второго экрана или воспользуйся резервным кодом через ручной ввод.</Alert>}
       </Stack>
     </Container>
+  );
+}
+
+function BoardSizeIllustration({ size }: { size: BoardSize }) {
+  const region = regionDimensions(size);
+  const blockRows = size / region.rows;
+  const blockCols = size / region.cols;
+  const count = blockRows * blockCols;
+  return (
+    <div className="board-mode-art" style={{ '--block-rows': blockRows, '--block-cols': blockCols } as CSSProperties} aria-hidden="true">
+      {Array.from({ length: count }, (_, index) => <span key={index} />)}
+    </div>
   );
 }
 
