@@ -65,9 +65,9 @@ export function NumberPad({
     <Stack gap={10} className={`number-pad-wrap ${notesMode ? 'notes-active' : ''}`}>
       <Group justify="space-around" gap={0} className="tool-row">
         <ActionIcon
-          variant={eraserMode ? 'light' : 'subtle'}
+          variant="subtle"
           color={eraserMode ? 'indigo' : 'gray'}
-          radius="xl"
+          radius="md"
           size={52}
           onClick={onToggleEraser}
           disabled={disabled}
@@ -78,9 +78,9 @@ export function NumberPad({
           <IconEraser size={30} stroke={1.75} />
         </ActionIcon>
         <ActionIcon
-          variant={notesMode ? 'light' : 'subtle'}
+          variant="subtle"
           color={notesMode ? 'indigo' : 'gray'}
-          radius="xl"
+          radius="md"
           size={52}
           className="reference-tool pressable-control"
           onClick={onToggleNotes}
@@ -91,9 +91,9 @@ export function NumberPad({
           <IconPencil size={29} stroke={1.75} />
         </ActionIcon>
         <ActionIcon
-          variant={hintActive ? 'light' : 'subtle'}
+          variant="subtle"
           color={hintActive ? 'yellow' : 'gray'}
-          radius="xl"
+          radius="md"
           size={52}
           onClick={onHint}
           disabled={disabled}
