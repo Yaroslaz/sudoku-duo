@@ -1,3 +1,8 @@
+.app-bg svg.tabler-icon {
+  display: block;
+  flex-shrink: 0;
+}
+
 .app-bg .mantine-ThemeIcon-root,
 .app-bg .mantine-ActionIcon-root {
   display: inline-grid !important;
@@ -15,6 +20,7 @@
 .app-bg .mantine-ActionIcon-root > svg,
 .app-bg .mantine-Button-section > svg,
 .app-bg .mantine-Alert-icon > svg,
+.app-bg .mantine-Menu-itemSection > svg,
 .app-bg .reference-connection > svg,
 .app-bg .history-button > svg,
 .app-bg .floating-hint-head > svg {
@@ -29,7 +35,8 @@
   transform-origin: center;
 }
 
-.app-bg .mantine-Button-section {
+.app-bg .mantine-Button-section,
+.app-bg .mantine-Menu-itemSection {
   display: inline-grid !important;
   place-items: center !important;
   align-items: center !important;
