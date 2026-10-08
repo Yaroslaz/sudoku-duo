@@ -21,10 +21,10 @@ export function useQrFrames(frames: string[], intervalMs = 1100) {
       return;
     }
     QRCode.toDataURL(frame, {
-      width: 540,
-      margin: 2,
-      errorCorrectionLevel: 'M',
-      color: { dark: '#201d3d', light: '#ffffff' },
+      width: 480,
+      margin: 3,
+      errorCorrectionLevel: 'L',
+      color: { dark: '#10131a', light: '#ffffff' },
     }).then((url) => {
       if (!cancelled) setDataUrl(url);
     });
