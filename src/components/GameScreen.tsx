@@ -11,12 +11,14 @@ import {
 } from '@mantine/core';
 import {
   IconArrowLeft,
+  IconBulb,
   IconCheck,
   IconHelpCircle,
   IconPlayerPause,
   IconPlayerPlay,
   IconWifi,
   IconWifiOff,
+  IconX,
 } from '@tabler/icons-react';
 import { useMemo, useState } from 'react';
 import { difficultyLabels, findHint, formatDuration } from '../game/engine';
@@ -24,7 +26,6 @@ import { elapsedMs, type GameAction } from '../game/session';
 import type { Coordinate, Digit, GameSnapshot, Hint, Player } from '../game/types';
 import { useNow } from '../hooks/useNow';
 import type { PeerState } from '../multiplayer/peer';
-import { HintDrawer } from './HintDrawer';
 import { NumberPad } from './NumberPad';
 import { RulesModal } from './RulesModal';
 import { SudokuBoard } from './SudokuBoard';
@@ -204,7 +205,7 @@ export function GameScreen({
     : scoreFormatter.format(localScore?.score ?? 0);
 
   return (
-    <main className={`game-shell reference-game ${notesMode ? 'notes-mode-active' : ''} ${eraserMode ? 'eraser-mode-active' : ''} ${lockedDigit ? 'locked-mode-active' : ''}`}>
+    <main className={`game-shell reference-game ${notesMode ? 'notes-mode-active' : ''} ${eraserMode ? 'eraser-mode-active' : ''} ${lockedDigit ? 'locked-mode-active' : ''} ${hintOpen ? 'hint-mode-active' : ''}`}>
       <header className="reference-header">
         <ActionIcon
           variant="subtle"
@@ -281,6 +282,51 @@ export function GameScreen({
         <div className="reference-connection-warning">Связь со вторым телефоном прервалась</div>
       )}
 
+      {hintOpen && (
+        <section className="inline-hint" aria-live="polite">
+          <IconBulb className="inline-hint-icon" size={24} stroke={1.9} aria-hidden="true" />
+          <div className="inline-hint-copy">
+            {hint ? (
+              <>
+                <Text fw={700} className="inline-hint-title">
+                  Строка {hint.cell.row + 1} · столбец {hint.cell.col + 1} — поставь {hint.digit}
+                </Text>
+                <Text className="inline-hint-text">{hintSummary(hint)}</Text>
+              </>
+            ) : (
+              <>
+                <Text fw={700} className="inline-hint-title">Сейчас нет очевидного хода</Text>
+                <Text className="inline-hint-text">Попробуй добавить кандидаты заметками и проверь поле ещё раз.</Text>
+              </>
+            )}
+          </div>
+          {hint && (
+            <ActionIcon
+              variant="subtle"
+              color="indigo"
+              radius="xl"
+              size={40}
+              onClick={applyHint}
+              aria-label={`Поставить ${hint.digit}`}
+              className="inline-hint-action pressable-control"
+            >
+              <IconCheck size={22} stroke={2.1} />
+            </ActionIcon>
+          )}
+          <ActionIcon
+            variant="subtle"
+            color="gray"
+            radius="xl"
+            size={40}
+            onClick={closeHint}
+            aria-label="Закрыть подсказку"
+            className="inline-hint-action pressable-control"
+          >
+            <IconX size={21} stroke={2} />
+          </ActionIcon>
+        </section>
+      )}
+
       <section className="board-section">
         <SudokuBoard
           puzzle={snapshot.puzzle}
@@ -332,7 +378,6 @@ export function GameScreen({
         </div>
       )}
 
-      <HintDrawer hint={hint} opened={hintOpen} onClose={closeHint} onApply={applyHint} />
       <RulesModal opened={rulesOpen} onClose={() => setRulesOpen(false)} />
 
       <Modal opened={leaveOpen} onClose={() => setLeaveOpen(false)} title="Выйти из игры?" centered radius="xl">
@@ -362,4 +407,11 @@ export function GameScreen({
       </Modal>
     </main>
   );
+}
+
+function hintSummary(hint: Hint) {
+  if (hint.kind === 'naked-single') return `В этой клетке остаётся только цифра ${hint.digit}.`;
+  if (hint.kind === 'hidden-single-row') return `Для цифры ${hint.digit} это единственное допустимое место в строке.`;
+  if (hint.kind === 'hidden-single-column') return `Для цифры ${hint.digit} это единственное допустимое место в столбце.`;
+  return `Для цифры ${hint.digit} это единственное допустимое место в квадрате 3×3.`;
 }
