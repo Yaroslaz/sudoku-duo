@@ -24,9 +24,9 @@ import {
   IconX,
 } from '@tabler/icons-react';
 import { useMemo, useState } from 'react';
-import { difficultyLabels, findHint, formatDuration, regionName, symbolForDigit } from '../game/engine';
+import { candidates, difficultyLabels, findHint, formatDuration, regionCells, regionDimensions, regionName, symbolForDigit } from '../game/engine';
 import { elapsedMs, type GameAction } from '../game/session';
-import type { Coordinate, Digit, GameSnapshot, Hint, Player } from '../game/types';
+import type { Board, Coordinate, Digit, GameSnapshot, Hint, Player } from '../game/types';
 import { useNow } from '../hooks/useNow';
 import type { PeerState } from '../multiplayer/peer';
 import { NumberPad } from './NumberPad';
@@ -111,6 +111,7 @@ export function GameScreen({
   const select = (row: number, col: number) => {
     if (paused || gameOver) return;
     const cell = { row, col };
+    if (!lockedDigit && !eraserMode && snapshot.board[row][col] === 0) setActiveDigit(null);
     setSelected(cell);
     onCursor(cell, notesMode);
   };
@@ -326,7 +327,7 @@ export function GameScreen({
             <ActionIcon variant="subtle" color="gray" radius="xl" size={34} onClick={closeHint} aria-label="Закрыть подсказку" className="pressable-control"><IconX size={19} /></ActionIcon>
           </div>
           <div className="floating-hint-body">
-            {hint ? <HintStepContent hint={hint} step={hintStep} size={snapshot.size} /> : <Text size="sm">Сейчас нет очевидного логического шага. Добавь кандидаты заметками и попробуй снова.</Text>}
+            {hint ? <HintStepContent hint={hint} step={hintStep} size={snapshot.size} board={snapshot.board} /> : <Text size="sm">Сейчас нет очевидного логического шага. Добавь кандидаты заметками и попробуй снова.</Text>}
           </div>
           {hint && (
             <div className="floating-hint-footer">
@@ -394,7 +395,7 @@ export function GameScreen({
   );
 }
 
-function HintStepContent({ hint, step, size }: { hint: Hint; step: number; size: GameSnapshot['size'] }) {
+function HintStepContent({ hint, step, size, board }: { hint: Hint; step: number; size: GameSnapshot['size']; board: Board }) {
   const symbol = symbolForDigit(hint.digit);
   if (step === 0) {
     return (
@@ -408,8 +409,8 @@ function HintStepContent({ hint, step, size }: { hint: Hint; step: number; size:
   if (step === 1) {
     return (
       <Stack gap={8}>
-        <Text fw={700}>Похожий пример</Text>
-        <HintExampleDiagram hint={hint} />
+        <Text fw={700}>Разберём на этом поле</Text>
+        <HintExampleDiagram hint={hint} board={board} size={size} />
         <Text size="sm" c="dimmed">{hintExample(hint)}</Text>
       </Stack>
     );
@@ -417,73 +418,164 @@ function HintStepContent({ hint, step, size }: { hint: Hint; step: number; size:
   return (
     <Stack gap={7}>
       <Text fw={700}>Почему это работает</Text>
-      <RuleDiagram hint={hint} />
+      <RuleDiagram hint={hint} size={size} />
       <Text size="sm" c="dimmed">{hintRule(hint, size)}</Text>
     </Stack>
   );
 }
 
-function HintExampleDiagram({ hint }: { hint: Hint }) {
+function HintExampleDiagram({ hint, board, size }: { hint: Hint; board: Board; size: GameSnapshot['size'] }) {
+  if (hint.kind === 'naked-single') {
+    return (
+      <div className="hint-context-layout">
+        <HintCrossExample hint={hint} board={board} size={size} />
+        <HintRegionExample hint={hint} board={board} size={size} compact />
+      </div>
+    );
+  }
+  if (hint.kind === 'hidden-single-row') return <HintAxisExample hint={hint} board={board} size={size} axis="row" />;
+  if (hint.kind === 'hidden-single-column') return <HintAxisExample hint={hint} board={board} size={size} axis="column" />;
+  return <HintRegionExample hint={hint} board={board} size={size} />;
+}
+
+function HintAxisExample({ hint, board, size, axis }: { hint: Hint; board: Board; size: GameSnapshot['size']; axis: 'row' | 'column' }) {
+  const targetIndex = axis === 'row' ? hint.cell.col : hint.cell.row;
+  const indices = axisWindow(size, targetIndex, axis === 'row' ? 9 : 7);
   const symbol = symbolForDigit(hint.digit);
-  if (hint.kind === 'hidden-single-row') {
-    return <div className="hint-example hint-example-row" aria-hidden="true">{['×', '×', symbol, '×', '×'].map((value, index) => <span key={index} className={index === 2 ? 'target' : 'blocked'}>{value}</span>)}</div>;
-  }
-  if (hint.kind === 'hidden-single-column') {
-    return <div className="hint-example hint-example-column" aria-hidden="true">{['×', '×', symbol, '×', '×'].map((value, index) => <span key={index} className={index === 2 ? 'target' : 'blocked'}>{value}</span>)}</div>;
-  }
-  if (hint.kind === 'hidden-single-box') {
-    return <div className="hint-example hint-example-box" aria-hidden="true">{Array.from({ length: 9 }, (_, index) => <span key={index} className={index === 4 ? 'target' : 'blocked'}>{index === 4 ? symbol : '×'}</span>)}</div>;
-  }
-  const eliminated = hint.eliminated.slice(0, 8).map(symbolForDigit);
   return (
-    <div className="hint-example hint-example-box" aria-hidden="true">
-      {Array.from({ length: 9 }, (_, index) => {
-        if (index === 4) return <span key={index} className="target">{symbol}</span>;
-        const source = eliminated[index < 4 ? index : index - 1] ?? '×';
-        return <span key={index} className="source">{source}</span>;
-      })}
+    <div className="hint-example-section">
+      <span className="hint-example-label">{axis === 'row' ? `Строка ${hint.cell.row + 1}` : `Столбец ${hint.cell.col + 1}`}</span>
+      <div
+        className={`hint-example hint-example-live-${axis}`}
+        style={axis === 'row'
+          ? { gridTemplateColumns: `repeat(${indices.length}, minmax(0, 1fr))` }
+          : { gridTemplateRows: `repeat(${indices.length}, 24px)` }}
+        aria-hidden="true"
+      >
+        {indices.map((index) => {
+          const row = axis === 'row' ? hint.cell.row : index;
+          const col = axis === 'row' ? index : hint.cell.col;
+          const isTarget = row === hint.cell.row && col === hint.cell.col;
+          const value = board[row][col];
+          if (isTarget) return <span key={index} className="target">{symbol}</span>;
+          if (value) return <span key={index} className={hint.eliminated.includes(value) ? 'source' : 'filled'}>{symbolForDigit(value)}</span>;
+          const allowed = candidates(board, row, col).includes(hint.digit);
+          return <span key={index} className={allowed ? 'candidate' : 'blocked'}>{allowed ? '•' : '×'}</span>;
+        })}
+      </div>
     </div>
   );
 }
 
-function RuleDiagram({ hint }: { hint: Hint }) {
+function HintCrossExample({ hint, board, size }: { hint: Hint; board: Board; size: GameSnapshot['size'] }) {
   const symbol = symbolForDigit(hint.digit);
   return (
-    <div className="hint-rule-diagram" aria-hidden="true">
+    <div className="hint-example-section">
+      <span className="hint-example-label">Строка + столбец</span>
+      <div className="hint-cross-example" aria-hidden="true">
+        {Array.from({ length: 25 }, (_, index) => {
+          const gridRow = Math.floor(index / 5);
+          const gridCol = index % 5;
+          const onRow = gridRow === 2;
+          const onColumn = gridCol === 2;
+          if (!onRow && !onColumn) return <span key={index} className="ghost" />;
+          if (gridRow === 2 && gridCol === 2) return <span key={index} className="target">{symbol}</span>;
+          const row = hint.cell.row + (gridRow - 2);
+          const col = hint.cell.col + (gridCol - 2);
+          if (row < 0 || col < 0 || row >= size || col >= size) return <span key={index} className="axis empty" />;
+          const value = onRow ? board[hint.cell.row][col] : board[row][hint.cell.col];
+          if (!value) return <span key={index} className="axis empty">·</span>;
+          return <span key={index} className={hint.eliminated.includes(value) ? 'axis source' : 'axis filled'}>{symbolForDigit(value)}</span>;
+        })}
+        <i className="cross-row-label">строка</i>
+        <i className="cross-column-label">столбец</i>
+      </div>
+    </div>
+  );
+}
+
+function HintRegionExample({ hint, board, size, compact = false }: { hint: Hint; board: Board; size: GameSnapshot['size']; compact?: boolean }) {
+  const cells = regionCells(size, hint.cell.row, hint.cell.col);
+  const dimensions = regionDimensions(size);
+  const symbol = symbolForDigit(hint.digit);
+  return (
+    <div className={`hint-example-section ${compact ? 'compact' : ''}`}>
+      <span className="hint-example-label">Блок</span>
+      <div className="hint-example hint-example-live-box" style={{ gridTemplateColumns: `repeat(${dimensions.cols}, minmax(0, 1fr))` }} aria-hidden="true">
+        {cells.map((cell) => {
+          const key = `${cell.row}:${cell.col}`;
+          const isTarget = cell.row === hint.cell.row && cell.col === hint.cell.col;
+          const value = board[cell.row][cell.col];
+          if (isTarget) return <span key={key} className="target">{symbol}</span>;
+          if (value) return <span key={key} className={hint.eliminated.includes(value) ? 'source' : 'filled'}>{symbolForDigit(value)}</span>;
+          const allowed = candidates(board, cell.row, cell.col).includes(hint.digit);
+          return <span key={key} className={hint.kind === 'hidden-single-box' && !allowed ? 'blocked' : 'empty'}>{hint.kind === 'hidden-single-box' && !allowed ? '×' : '·'}</span>;
+        })}
+      </div>
+    </div>
+  );
+}
+
+function axisWindow(size: number, target: number, max: number) {
+  const length = Math.min(size, max);
+  let start = Math.max(0, target - Math.floor(length / 2));
+  start = Math.min(start, size - length);
+  return Array.from({ length }, (_, index) => start + index);
+}
+
+function RuleDiagram({ hint, size }: { hint: Hint; size: GameSnapshot['size'] }) {
+  const symbol = symbolForDigit(hint.digit);
+  if (hint.kind === 'hidden-single-row') {
+    return <div className="hint-rule-axis hint-rule-row" aria-hidden="true">{Array.from({ length: 7 }, (_, index) => <span key={index} className={index === 3 ? 'target' : ''}>{index === 3 ? symbol : '×'}</span>)}</div>;
+  }
+  if (hint.kind === 'hidden-single-column') {
+    return <div className="hint-rule-axis hint-rule-column" aria-hidden="true">{Array.from({ length: 5 }, (_, index) => <span key={index} className={index === 2 ? 'target' : ''}>{index === 2 ? symbol : '×'}</span>)}</div>;
+  }
+  if (hint.kind === 'hidden-single-box') {
+    const dimensions = regionDimensions(size);
+    return (
+      <div className="hint-rule-box" style={{ gridTemplateColumns: `repeat(${dimensions.cols}, 24px)` }} aria-hidden="true">
+        {Array.from({ length: size }, (_, index) => <span key={index} className={index === Math.floor(size / 2) ? 'target' : ''}>{index === Math.floor(size / 2) ? symbol : '×'}</span>)}
+      </div>
+    );
+  }
+  return (
+    <div className="hint-rule-cross-simple" aria-hidden="true">
       <span className="rule-row">строка</span>
       <span className="rule-column">столбец</span>
-      <span className="rule-box">блок</span>
       <strong>{symbol}</strong>
+      <small>+ блок</small>
     </div>
   );
 }
 
 function hintLiveGuide(hint: Hint) {
   const symbol = symbolForDigit(hint.digit);
-  if (hint.kind === 'naked-single') return 'На поле подсвечены клетки, цифры которых исключают остальные варианты.';
-  if (hint.kind === 'hidden-single-row') return `Подсвечена нужная строка. На следующем шаге видно, какие ${symbol} блокируют остальные позиции.`;
-  if (hint.kind === 'hidden-single-column') return `Подсвечен нужный столбец. На следующем шаге видно, какие ${symbol} блокируют остальные позиции.`;
-  return `Подсвечен нужный блок. На следующем шаге видно, какие ${symbol} закрывают остальные клетки.`;
+  if (hint.kind === 'naked-single') return 'На поле подсвечены уже стоящие символы, которые исключают остальные варианты для этой клетки.';
+  if (hint.kind === 'hidden-single-row') return `Подсвечена нужная строка. На следующем шаге видно, в каких местах ${symbol} уже запрещён столбцом или блоком.`;
+  if (hint.kind === 'hidden-single-column') return `Подсвечен нужный столбец. На следующем шаге видно, в каких местах ${symbol} уже запрещён строкой или блоком.`;
+  return `Подсвечен нужный блок. На следующем шаге видно, какие строки и столбцы закрывают остальные места для ${symbol}.`;
 }
 
 function hintSummary(hint: Hint) {
   const symbol = symbolForDigit(hint.digit);
-  if (hint.kind === 'naked-single') return `После исключения занятых вариантов у клетки остаётся только ${symbol}.`;
+  if (hint.kind === 'naked-single') return `После проверки строки, столбца и блока у этой клетки остаётся только ${symbol}.`;
   if (hint.kind === 'hidden-single-row') return `В этой строке только одна клетка допускает ${symbol}.`;
   if (hint.kind === 'hidden-single-column') return `В этом столбце только одна клетка допускает ${symbol}.`;
   return `В этом блоке только одна клетка допускает ${symbol}.`;
 }
 
 function hintExample(hint: Hint) {
-  if (hint.kind === 'naked-single') return 'В центре остаётся единственный вариант. Цифры вокруг показывают уже исключённые кандидаты.';
-  if (hint.kind === 'hidden-single-row') return 'В строке несколько пустых мест, но четыре позиции уже закрыты ограничениями. Остаётся одна клетка для нужного символа.';
-  if (hint.kind === 'hidden-single-column') return 'То же по вертикали: ограничения закрывают остальные позиции столбца, поэтому символ ставится в единственную свободную точку.';
-  return 'Внутри блока остальные клетки недоступны для этого символа, поэтому центральная подсвеченная клетка становится единственным местом.';
+  const symbol = symbolForDigit(hint.digit);
+  if (hint.kind === 'naked-single') return `Смотри на пересечение строки и столбца, а затем на блок. Уже встречающиеся символы исключаются. Если остаётся только ${symbol}, его и ставим.`;
+  if (hint.kind === 'hidden-single-row') return `Это именно строка. × означает, что ${symbol} в этой позиции запрещён её столбцом или блоком; подсвеченная клетка остаётся единственной.`;
+  if (hint.kind === 'hidden-single-column') return `Это именно столбец. × означает, что ${symbol} в этой позиции запрещён её строкой или блоком; остаётся одна допустимая клетка.`;
+  return `Показан именно текущий блок. × отмечает клетки, где ${symbol} уже запрещён пересекающей строкой или столбцом.`;
 }
 
 function hintRule(hint: Hint, size: GameSnapshot['size']) {
-  if (hint.kind === 'naked-single') return `Правило «единственный кандидат»: символ ставится, когда после правил строки, столбца и ${regionName(size)} у клетки остаётся ровно один кандидат.`;
+  if (hint.kind === 'naked-single') return `Правило «единственный кандидат»: символ ставится, когда после проверки строки, столбца и ${regionName(size)} у клетки остаётся ровно один вариант.`;
   if (hint.kind === 'hidden-single-row') return 'Правило «скрытая одиночка»: если конкретный символ может стоять только в одной клетке строки, он обязан быть там, даже если у клетки есть другие кандидаты.';
-  if (hint.kind === 'hidden-single-column') return 'Правило «скрытая одиночка» работает так же для столбца: единственная допустимая позиция фиксирует символ.';
-  return 'Правило «скрытая одиночка» работает и внутри блока: если для символа осталась одна допустимая клетка, она является ответом.';
+  if (hint.kind === 'hidden-single-column') return 'То же для столбца: если у символа осталась только одна допустимая позиция по вертикали, ставим его туда.';
+  return 'То же внутри блока: если для символа осталась одна допустимая клетка в блоке, она является ответом.';
 }
