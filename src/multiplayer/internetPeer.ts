@@ -8,6 +8,7 @@ export type SavedCodeRoom = { kind: CodeRoomKind; code: string; role: 'host' | '
 
 const LAST_ROOM_KEY = 'sudoku-duo:last-code-room:v1';
 const RECONNECT_DELAYS = [450, 800, 1_300, 2_100, 3_400, 5_000, 7_000];
+const STALE_CONNECTION_MS = 14_000;
 
 function roomPrefix(kind: CodeRoomKind) {
   return kind === 'local-code' ? 'sudoku-duo-lan-' : 'sudoku-duo-';
@@ -38,6 +39,9 @@ export class InternetPeerSession implements GamePeerSession {
   private reconnectAttempt = 0;
   private hostRecoveryAttempt = 0;
   private connectionToken = 0;
+  private lastPongAt = 0;
+  private guestReconnectInFlight = false;
+  private hostRecoveryInFlight = false;
   private state: PeerState = 'idle';
   private role: 'host' | 'guest' | null = null;
   private roomCode: string | null = null;
@@ -79,7 +83,7 @@ export class InternetPeerSession implements GamePeerSession {
   }
 
   private scheduleReconnect(immediate = false) {
-    if (this.closedByUser || this.role !== 'guest' || !this.roomCode) return;
+    if (this.closedByUser || this.role !== 'guest' || !this.roomCode || this.connection?.open) return;
     this.clearReconnectTimer();
     const delay = immediate ? 0 : RECONNECT_DELAYS[Math.min(this.reconnectAttempt, RECONNECT_DELAYS.length - 1)];
     this.reconnectAttempt += 1;
@@ -119,6 +123,7 @@ export class InternetPeerSession implements GamePeerSession {
       this.clearHostRecoveryTimer();
       this.reconnectAttempt = 0;
       this.hostRecoveryAttempt = 0;
+      this.lastPongAt = Date.now();
       this.setState('connected');
       this.send({ type: 'hello', player: this.localPlayer });
       this.startPing();
@@ -161,6 +166,7 @@ export class InternetPeerSession implements GamePeerSession {
         return;
       }
       if (message.type === 'pong') {
+        this.lastPongAt = Date.now();
         this.callbacks.onLatency?.(Date.now() - message.at);
         return;
       }
@@ -174,15 +180,14 @@ export class InternetPeerSession implements GamePeerSession {
     this.peer = peer;
 
     peer.on('open', () => {
-      if (this.closedByUser) return;
-      if (this.connection?.open) return;
+      if (this.closedByUser || this.connection?.open) return;
       if (this.role === 'host') {
         this.hostRecoveryAttempt = 0;
         this.clearHostRecoveryTimer();
         this.setState('waiting');
-      } else if (this.role === 'guest') {
-        this.scheduleReconnect(true);
       }
+      // Guest connection is started by joinRoom/reconnectGuest. Do not create
+      // another connection here: duplicate attempts were a source of drops.
     });
 
     peer.on('connection', (connection) => {
@@ -274,65 +279,74 @@ export class InternetPeerSession implements GamePeerSession {
   }
 
   private async recoverHostRoom() {
-    if (this.closedByUser || this.role !== 'host' || !this.roomCode || this.connection?.open) return;
-
-    if (this.peer?.open) {
-      this.setState('waiting');
-      this.hostRecoveryAttempt = 0;
-      return;
-    }
-
-    if (this.peer && !this.peer.destroyed && this.peer.disconnected) {
-      this.recoverPeerSignaling();
-      await new Promise((resolve) => window.setTimeout(resolve, 1_100));
+    if (this.hostRecoveryInFlight || this.closedByUser || this.role !== 'host' || !this.roomCode || this.connection?.open) return;
+    this.hostRecoveryInFlight = true;
+    try {
       if (this.peer?.open) {
         this.setState('waiting');
         this.hostRecoveryAttempt = 0;
         return;
       }
-    }
 
-    try {
-      const peer = this.makePeer(this.roomPeerId());
-      await this.waitForPeerOpen(peer, 7_000);
-      this.hostRecoveryAttempt = 0;
-      this.setState('waiting');
-    } catch {
-      this.setState('disconnected');
-      this.scheduleHostRecovery();
+      if (this.peer && !this.peer.destroyed && this.peer.disconnected) {
+        this.recoverPeerSignaling();
+        await new Promise((resolve) => window.setTimeout(resolve, 1_100));
+        if (this.peer?.open) {
+          this.setState('waiting');
+          this.hostRecoveryAttempt = 0;
+          return;
+        }
+      }
+
+      try {
+        const peer = this.makePeer(this.roomPeerId());
+        await this.waitForPeerOpen(peer, 7_000);
+        this.hostRecoveryAttempt = 0;
+        this.setState('waiting');
+      } catch {
+        this.setState('disconnected');
+        this.scheduleHostRecovery();
+      }
+    } finally {
+      this.hostRecoveryInFlight = false;
     }
   }
 
   private async reconnectGuest() {
-    if (this.closedByUser || this.role !== 'guest' || !this.roomCode || this.connection?.open) return;
-    const peer = this.peer;
-    if (!peer || peer.destroyed) {
-      const recreated = this.makePeer();
-      try {
-        await this.waitForPeerOpen(recreated, 8_000);
-      } catch {
-        this.scheduleReconnect();
-        return;
-      }
-    } else if (peer.disconnected) {
-      this.recoverPeerSignaling();
-      await new Promise((resolve) => window.setTimeout(resolve, 650));
-      if (!this.peer?.open) {
-        this.scheduleReconnect();
-        return;
-      }
-    } else if (!peer.open) {
-      this.scheduleReconnect();
-      return;
-    }
-
-    if (!this.peer?.open || this.connection?.open) return;
+    if (this.guestReconnectInFlight || this.closedByUser || this.role !== 'guest' || !this.roomCode || this.connection?.open) return;
+    this.guestReconnectInFlight = true;
     try {
-      const connection = this.peer.connect(this.roomPeerId(), { reliable: true });
-      this.attachConnection(connection);
-    } catch {
-      this.setState('disconnected');
-      this.scheduleReconnect();
+      const peer = this.peer;
+      if (!peer || peer.destroyed) {
+        const recreated = this.makePeer();
+        try {
+          await this.waitForPeerOpen(recreated, 8_000);
+        } catch {
+          this.scheduleReconnect();
+          return;
+        }
+      } else if (peer.disconnected) {
+        this.recoverPeerSignaling();
+        await new Promise((resolve) => window.setTimeout(resolve, 650));
+        if (!this.peer?.open) {
+          this.scheduleReconnect();
+          return;
+        }
+      } else if (!peer.open) {
+        this.scheduleReconnect();
+        return;
+      }
+
+      if (!this.peer?.open || this.connection?.open) return;
+      try {
+        const connection = this.peer.connect(this.roomPeerId(), { reliable: true });
+        this.attachConnection(connection);
+      } catch {
+        this.setState('disconnected');
+        this.scheduleReconnect();
+      }
+    } finally {
+      this.guestReconnectInFlight = false;
     }
   }
 
@@ -378,10 +392,23 @@ export class InternetPeerSession implements GamePeerSession {
   private startPing() {
     this.stopPing();
     this.pingTimer = window.setInterval(() => {
-      if (!this.send({ type: 'ping', at: Date.now() })) {
+      const connection = this.connection;
+      if (!connection?.open) {
         this.callbacks.onLatency?.(null);
         if (this.role === 'guest') this.scheduleReconnect(true);
         else this.scheduleHostRecovery(true);
+        return;
+      }
+
+      if (this.lastPongAt && Date.now() - this.lastPongAt > STALE_CONNECTION_MS) {
+        this.callbacks.onLatency?.(null);
+        try { connection.close(); } catch { /* noop */ }
+        return;
+      }
+
+      if (!this.send({ type: 'ping', at: Date.now() })) {
+        this.callbacks.onLatency?.(null);
+        try { connection.close(); } catch { /* noop */ }
       }
     }, 4_000);
   }
@@ -392,6 +419,8 @@ export class InternetPeerSession implements GamePeerSession {
     this.clearHostRecoveryTimer();
     this.stopPing();
     this.connectionToken += 1;
+    this.guestReconnectInFlight = false;
+    this.hostRecoveryInFlight = false;
     try { this.connection?.close(); } catch { /* noop */ }
     this.connection = null;
     try { this.peer?.destroy(); } catch { /* noop */ }
