@@ -18,12 +18,14 @@ import {
   IconCheck,
   IconChevronDown,
   IconPlayerPlay,
+  IconTrophy,
   IconUser,
   IconUsers,
 } from '@tabler/icons-react';
 import { useState, type CSSProperties } from 'react';
 import { boardSizes, difficulties, difficultyLabels, regionDimensions } from '../game/engine';
 import type { BoardSize, Difficulty, GameSnapshot, MistakeLimit } from '../game/types';
+import { RecordsScreen } from './RecordsScreen';
 
 export function HomeScreen({
   savedGame,
@@ -38,10 +40,12 @@ export function HomeScreen({
   onContinue: () => void;
   onRules: () => void;
 }) {
-  const [view, setView] = useState<'home' | 'solo'>('home');
+  const [view, setView] = useState<'home' | 'solo' | 'records'>('home');
   const [size, setSize] = useState<BoardSize>(9);
   const [difficulty, setDifficulty] = useState<Difficulty>('medium');
   const [mistakeLimit, setMistakeLimit] = useState<MistakeLimit>(null);
+
+  if (view === 'records') return <RecordsScreen onBack={() => setView('home')} />;
 
   return (
     <Container size="sm" className="home-screen">
@@ -52,6 +56,7 @@ export function HomeScreen({
           onRules={onRules}
           onMultiplayer={onMultiplayer}
           onSolo={() => setView('solo')}
+          onRecords={() => setView('records')}
         />
       ) : (
         <SoloSetup
@@ -75,12 +80,14 @@ function HomeLanding({
   onRules,
   onMultiplayer,
   onSolo,
+  onRecords,
 }: {
   savedGame: GameSnapshot | null;
   onContinue: () => void;
   onRules: () => void;
   onMultiplayer: () => void;
   onSolo: () => void;
+  onRecords: () => void;
 }) {
   return (
     <Stack gap="lg" className="home-content">
@@ -113,6 +120,21 @@ function HomeLanding({
           </Paper>
         </UnstyledButton>
       )}
+
+      <UnstyledButton onClick={onRecords} className="records-entry-button">
+        <Paper radius="xl" p="md" shadow="xs" className="records-entry-card">
+          <Group justify="space-between" wrap="nowrap" gap="md">
+            <Group gap="sm" wrap="nowrap">
+              <ThemeIcon variant="light" color="yellow" radius="xl" size={44}><IconTrophy size={21} /></ThemeIcon>
+              <Stack gap={1}>
+                <Text fw={750}>Рекорды</Text>
+                <Text size="sm" c="dimmed">Лучшие результаты и история напарников</Text>
+              </Stack>
+            </Group>
+            <ThemeIcon variant="light" color="gray" radius="xl" size={34}><IconArrowRight size={17} /></ThemeIcon>
+          </Group>
+        </Paper>
+      </UnstyledButton>
 
       <SimpleGrid cols={{ base: 1, xs: 2 }} spacing="md" className="home-mode-grid">
         <ModeCard
