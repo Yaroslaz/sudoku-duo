@@ -48,3 +48,38 @@
 .reference-game .sudoku-board.size-5 .notes-grid { font-size: clamp(.62rem, 3vw, .95rem); }
 .reference-game .sudoku-board.size-6 .notes-grid { font-size: clamp(.54rem, 2.5vw, .86rem); }
 .reference-game .sudoku-board.size-9 .notes-grid { font-size: clamp(.44rem, 2vw, .78rem); }
+
+/* Smart hint docking: keep the explanation away from its highlighted cell. */
+.floating-hint {
+  top: auto;
+  bottom: max(calc(var(--safe-bottom) + 10px), 12px);
+  max-height: min(210px, 28dvh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.reference-game:has(.sudoku-board.size-4 .hint-target[data-row='2']) .floating-hint,
+.reference-game:has(.sudoku-board.size-4 .hint-target[data-row='3']) .floating-hint,
+.reference-game:has(.sudoku-board.size-5 .hint-target[data-row='3']) .floating-hint,
+.reference-game:has(.sudoku-board.size-5 .hint-target[data-row='4']) .floating-hint,
+.reference-game:has(.sudoku-board.size-6 .hint-target[data-row='3']) .floating-hint,
+.reference-game:has(.sudoku-board.size-6 .hint-target[data-row='4']) .floating-hint,
+.reference-game:has(.sudoku-board.size-6 .hint-target[data-row='5']) .floating-hint,
+.reference-game:has(.sudoku-board.size-9 .hint-target[data-row='5']) .floating-hint,
+.reference-game:has(.sudoku-board.size-9 .hint-target[data-row='6']) .floating-hint,
+.reference-game:has(.sudoku-board.size-9 .hint-target[data-row='7']) .floating-hint,
+.reference-game:has(.sudoku-board.size-9 .hint-target[data-row='8']) .floating-hint {
+  top: max(calc(var(--safe-top) + 56px), 62px);
+  bottom: auto;
+}
+
+.floating-hint-body {
+  min-height: 48px;
+  padding-top: 4px;
+  padding-bottom: 2px;
+}
+
+@media (max-height: 700px) {
+  .floating-hint { max-height: 180px; }
+  .floating-hint-body { min-height: 40px; }
+}
