@@ -17,7 +17,6 @@
     "@tabler/icons-react": "^3.49.0",
     "@zxing/browser": "^0.2.1",
     "@zxing/library": "^0.23.0",
-    "peerjs": "^1.5.5",
     "qrcode": "^1.5.4",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"
