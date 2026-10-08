@@ -58,6 +58,17 @@
   box-shadow: inset 0 0 0 2px rgba(49, 106, 177, .2);
 }
 
+/* Matching never hides the fact that an entered value is wrong. */
+.reference-game .sudoku-cell.same-value.wrong {
+  background: #ffe3e8 !important;
+  color: #c92f46 !important;
+  box-shadow: inset 0 0 0 1px rgba(201, 47, 70, .32);
+}
+
+.reference-game .sudoku-cell.same-value.wrong .cell-value {
+  color: #c92f46 !important;
+}
+
 /* Matching candidates stay readable when the same symbol is active on the number pad. */
 .reference-game .notes-grid span.note-match {
   width: 1.45em;
