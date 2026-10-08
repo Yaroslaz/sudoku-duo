@@ -26,7 +26,7 @@ import {
   IconWifi,
   IconWorld,
 } from '@tabler/icons-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { boardSizes, difficultyLabels } from '../game/engine';
 import { playerColors } from '../game/playerColors';
 import type { BoardSize, Difficulty, Player, PlayerColor } from '../game/types';
@@ -46,16 +46,7 @@ export type PairingResult = {
   size: BoardSize | null;
 };
 
-export function PairingScreen({
-  initialName,
-  initialColor,
-  deviceId,
-  reconnectMode = false,
-  onBack,
-  onNameChange,
-  onColorChange,
-  onConnected,
-}: {
+export function PairingScreen({ initialName, initialColor, deviceId, reconnectMode = false, onBack, onNameChange, onColorChange, onConnected }: {
   initialName: string;
   initialColor: PlayerColor;
   deviceId: string;
@@ -100,14 +91,7 @@ export function PairingScreen({
   useEffect(() => {
     if (peerState !== 'connected' || !sessionRef.current || !role || !remote || !localPlayer || handedOff.current) return;
     handedOff.current = true;
-    onConnected({
-      session: sessionRef.current,
-      role,
-      localPlayer,
-      remotePlayer: remote,
-      difficulty: role === 'host' && !reconnectMode ? difficulty : null,
-      size: role === 'host' && !reconnectMode ? size : null,
-    });
+    onConnected({ session: sessionRef.current, role, localPlayer, remotePlayer: remote, difficulty: role === 'host' && !reconnectMode ? difficulty : null, size: role === 'host' && !reconnectMode ? size : null });
   }, [difficulty, localPlayer, onConnected, peerState, reconnectMode, remote, role, size]);
 
   useEffect(() => () => {
@@ -190,32 +174,19 @@ export function PairingScreen({
                   <UnstyledButton
                     key={item.value}
                     className="player-color-button"
-                    style={{ '--swatch': item.hex } as React.CSSProperties}
+                    style={{ '--swatch': item.hex } as CSSProperties}
                     aria-label={item.label}
                     aria-pressed={color === item.value}
                     onClick={() => changeColor(item.value)}
-                  >
-                    <span />
-                  </UnstyledButton>
+                  ><span /></UnstyledButton>
                 ))}
               </Group>
             </Stack>
 
             <SimpleGrid cols={{ base: 1, xs: 2 }} spacing="md">
-              <UnstyledButton onClick={() => setPhase('host-settings')} className="pair-choice-button">
-                <Paper radius="xl" p="lg" shadow="xs" className="pair-choice-card">
-                  <ThemeIcon size={48} radius="xl" color="indigo" variant="light"><IconQrcode size={23} /></ThemeIcon>
-                  <Stack gap={3} mt="md"><Text fw={750}>{reconnectMode ? 'Создать новое соединение' : 'Создать игру'}</Text><Text size="sm" c="dimmed">Покажи QR второму телефону.</Text></Stack>
-                </Paper>
-              </UnstyledButton>
-              <UnstyledButton onClick={() => setPhase('guest-offer')} className="pair-choice-button">
-                <Paper radius="xl" p="lg" shadow="xs" className="pair-choice-card">
-                  <ThemeIcon size={48} radius="xl" color="cyan" variant="light"><IconScan size={23} /></ThemeIcon>
-                  <Stack gap={3} mt="md"><Text fw={750}>Присоединиться</Text><Text size="sm" c="dimmed">Сканируй QR на другом телефоне.</Text></Stack>
-                </Paper>
-              </UnstyledButton>
+              <UnstyledButton onClick={() => setPhase('host-settings')} className="pair-choice-button"><Paper radius="xl" p="lg" shadow="xs" className="pair-choice-card"><ThemeIcon size={48} radius="xl" color="indigo" variant="light"><IconQrcode size={23} /></ThemeIcon><Stack gap={3} mt="md"><Text fw={750}>{reconnectMode ? 'Создать новое соединение' : 'Создать игру'}</Text><Text size="sm" c="dimmed">Покажи QR второму телефону.</Text></Stack></Paper></UnstyledButton>
+              <UnstyledButton onClick={() => setPhase('guest-offer')} className="pair-choice-button"><Paper radius="xl" p="lg" shadow="xs" className="pair-choice-card"><ThemeIcon size={48} radius="xl" color="cyan" variant="light"><IconScan size={23} /></ThemeIcon><Stack gap={3} mt="md"><Text fw={750}>Присоединиться</Text><Text size="sm" c="dimmed">Сканируй QR на другом телефоне.</Text></Stack></Paper></UnstyledButton>
             </SimpleGrid>
-
             <Alert icon={<IconInfoCircle size={18} />} color="gray" radius="lg">Для полностью локальной игры оба телефона должны быть в одной Wi‑Fi сети.</Alert>
           </>
         )}
@@ -223,40 +194,13 @@ export function PairingScreen({
         {phase === 'host-settings' && (
           <>
             <Stack gap={5}><Title order={2}>{reconnectMode ? 'Настрой соединение' : 'Настрой игру'}</Title><Text c="dimmed">{reconnectMode ? 'Размер и сложность уже сохранены в текущей партии.' : 'Создатель выбирает размер, сложность и способ соединения.'}</Text></Stack>
-
             {!reconnectMode && (
               <>
-                <Stack gap={7}>
-                  <Text fw={700}>Размер поля</Text>
-                  <SimpleGrid cols={4} spacing="xs">
-                    {boardSizes.map((value) => <Button key={value} variant={size === value ? 'light' : 'default'} color="indigo" radius="md" onClick={() => setSize(value)} aria-pressed={size === value}>{value}×{value}</Button>)}
-                  </SimpleGrid>
-                  {size === 5 && <Text size="xs" c="dimmed">5×5 использует пять неровных областей по пять клеток.</Text>}
-                </Stack>
-
-                <SimpleGrid cols={2} spacing="sm">
-                  {(Object.keys(difficultyLabels) as Difficulty[]).map((key) => (
-                    <UnstyledButton key={key} onClick={() => setDifficulty(key)} className="difficulty-choice">
-                      <Paper radius="lg" p="md" shadow="xs" className={difficulty === key ? 'difficulty-card active' : 'difficulty-card'}>
-                        <Text fw={700}>{difficultyLabels[key]}</Text><Text size="xs" c="dimmed">{difficultyDescription(key)}</Text>
-                      </Paper>
-                    </UnstyledButton>
-                  ))}
-                </SimpleGrid>
+                <Stack gap={7}><Text fw={700}>Размер поля</Text><SimpleGrid cols={4} spacing="xs">{boardSizes.map((value) => <Button key={value} variant={size === value ? 'light' : 'default'} color="indigo" radius="md" onClick={() => setSize(value)} aria-pressed={size === value}>{value}×{value}</Button>)}</SimpleGrid>{size === 5 && <Text size="xs" c="dimmed">5×5 использует пять неровных областей по пять клеток.</Text>}</Stack>
+                <SimpleGrid cols={2} spacing="sm">{(Object.keys(difficultyLabels) as Difficulty[]).map((key) => <UnstyledButton key={key} onClick={() => setDifficulty(key)} className="difficulty-choice"><Paper radius="lg" p="md" shadow="xs" className={difficulty === key ? 'difficulty-card active' : 'difficulty-card'}><Text fw={700}>{difficultyLabels[key]}</Text><Text size="xs" c="dimmed">{difficultyDescription(key)}</Text></Paper></UnstyledButton>)}</SimpleGrid>
               </>
             )}
-
-            <Paper radius="xl" p="md" shadow="xs">
-              <Stack gap="sm">
-                <Text fw={700}>Соединение</Text>
-                <SegmentedControl fullWidth radius="xl" value={networkMode} onChange={(value: string) => setNetworkMode(value as NetworkMode)} data={[{ label: 'Одна Wi‑Fi сеть', value: 'local' }, { label: 'Через интернет', value: 'internet-assisted' }]} />
-                <Group gap="xs" align="flex-start" wrap="nowrap">
-                  <ThemeIcon variant="light" color={networkMode === 'local' ? 'indigo' : 'cyan'} size="sm" radius="xl">{networkMode === 'local' ? <IconWifi size={14} /> : <IconWorld size={14} />}</ThemeIcon>
-                  <Text size="xs" c="dimmed">{networkMode === 'local' ? 'Прямое соединение внутри одной сети.' : 'STUN помогает найти прямой сетевой маршрут. Игровые данные через него не передаются.'}</Text>
-                </Group>
-              </Stack>
-            </Paper>
-
+            <Paper radius="xl" p="md" shadow="xs"><Stack gap="sm"><Text fw={700}>Соединение</Text><SegmentedControl fullWidth radius="xl" value={networkMode} onChange={(value: string) => setNetworkMode(value as NetworkMode)} data={[{ label: 'Одна Wi‑Fi сеть', value: 'local' }, { label: 'Через интернет', value: 'internet-assisted' }]} /><Group gap="xs" align="flex-start" wrap="nowrap"><ThemeIcon variant="light" color={networkMode === 'local' ? 'indigo' : 'cyan'} size="sm" radius="xl">{networkMode === 'local' ? <IconWifi size={14} /> : <IconWorld size={14} />}</ThemeIcon><Text size="xs" c="dimmed">{networkMode === 'local' ? 'Прямое соединение внутри одной сети.' : 'STUN помогает найти прямой сетевой маршрут. Игровые данные через него не передаются.'}</Text></Group></Stack></Paper>
             <Button size="lg" radius="xl" leftSection={<IconQrcode size={19} />} onClick={() => void createRoom()} loading={peerState === 'gathering'}>Создать QR</Button>
           </>
         )}
