@@ -18,6 +18,8 @@ export type SignalPayload = {
 const LEGACY_PREFIX = 'sudoku2';
 const BASE45 = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:';
 const MAX_SINGLE_QR_CHARS = 2850;
+const textEncoder = new TextEncoder();
+const textDecoder = new TextDecoder();
 
 type PackedSignalV2 = {
   p: 2;
@@ -47,6 +49,11 @@ type PendingChunks = {
   codec: string;
   total: number;
   chunks: Array<string | undefined>;
+};
+
+type CompactCandidate = {
+  address: string;
+  port: number;
 };
 
 function bytesToBase64Url(bytes: Uint8Array): string {
@@ -110,7 +117,7 @@ function base45ToBytes(value: string): Uint8Array {
 }
 
 async function compress(text: string): Promise<{ codec: 'g' | 'r'; data: Uint8Array }> {
-  const bytes = new TextEncoder().encode(text);
+  const bytes = textEncoder.encode(text);
   if ('CompressionStream' in globalThis) {
     try {
       const buffer = new ArrayBuffer(bytes.byteLength);
@@ -135,7 +142,182 @@ async function decompress(codec: string, bytes: Uint8Array): Promise<string> {
     return await new Response(stream).text();
   }
   if (codec !== 'r') throw new Error('Неизвестный формат QR');
-  return new TextDecoder().decode(bytes);
+  return textDecoder.decode(bytes);
+}
+
+function lineValue(lines: string[], prefix: string) {
+  const line = lines.find((item) => item.startsWith(prefix));
+  return line?.slice(prefix.length) ?? '';
+}
+
+function parseHostUdpCandidate(line: string): CompactCandidate | null {
+  const raw = line.replace(/^a=candidate:/, '');
+  const parts = raw.split(/\s+/);
+  const typeIndex = parts.indexOf('typ');
+  if (
+    parts.length < 8 ||
+    typeIndex < 0 ||
+    parts[1] !== '1' ||
+    parts[2]?.toLowerCase() !== 'udp' ||
+    parts[typeIndex + 1] !== 'host'
+  ) return null;
+  const port = Number(parts[5]);
+  if (!Number.isInteger(port) || port < 1 || port > 65535 || !parts[4]) return null;
+  return { address: parts[4], port };
+}
+
+function parseIpv4(address: string): number[] | null {
+  const parts = address.split('.');
+  if (parts.length !== 4) return null;
+  const values = parts.map(Number);
+  if (values.some((value) => !Number.isInteger(value) || value < 0 || value > 255)) return null;
+  return values;
+}
+
+function fingerprintToBytes(value: string): Uint8Array | null {
+  const normalized = value.replace(/^sha-256\s+/i, '');
+  const parts = normalized.split(':');
+  if (parts.length !== 32) return null;
+  const bytes = new Uint8Array(32);
+  for (let index = 0; index < parts.length; index += 1) {
+    if (!/^[0-9a-f]{2}$/i.test(parts[index])) return null;
+    bytes[index] = Number.parseInt(parts[index], 16);
+  }
+  return bytes;
+}
+
+function bytesToFingerprint(bytes: Uint8Array) {
+  return Array.from(bytes, (value) => value.toString(16).padStart(2, '0').toUpperCase()).join(':');
+}
+
+function setupToBits(value: string): number | null {
+  if (value === 'actpass') return 0;
+  if (value === 'active') return 1;
+  if (value === 'passive') return 2;
+  return null;
+}
+
+function bitsToSetup(value: number) {
+  if (value === 1) return 'active';
+  if (value === 2) return 'passive';
+  return 'actpass';
+}
+
+function packBinary(payload: SignalPayload): Uint8Array | null {
+  const sdp = payload.sdp.sdp;
+  if (!sdp) return null;
+  const lines = sdp.split(/\r?\n/).filter(Boolean);
+  const ufrag = textEncoder.encode(lineValue(lines, 'a=ice-ufrag:'));
+  const pwd = textEncoder.encode(lineValue(lines, 'a=ice-pwd:'));
+  const fingerprint = fingerprintToBytes(lineValue(lines, 'a=fingerprint:'));
+  const setupBits = setupToBits(lineValue(lines, 'a=setup:'));
+  const sctpPort = lineValue(lines, 'a=sctp-port:');
+  const maxMessageSize = lineValue(lines, 'a=max-message-size:');
+  const candidates = lines
+    .filter((line) => line.startsWith('a=candidate:'))
+    .map(parseHostUdpCandidate)
+    .filter((candidate): candidate is CompactCandidate => Boolean(candidate));
+
+  // Non-default SCTP parameters stay on the compatible textual path.
+  if (
+    ufrag.length === 0 || ufrag.length > 255 ||
+    pwd.length === 0 || pwd.length > 255 ||
+    !fingerprint || setupBits === null ||
+    candidates.length === 0 || candidates.length > 255 ||
+    (sctpPort && sctpPort !== '5000') ||
+    (maxMessageSize && maxMessageSize !== '262144')
+  ) return null;
+
+  const bytes: number[] = [];
+  const kindBit = payload.kind === 'answer' ? 1 : 0;
+  bytes.push(kindBit | (setupBits << 1));
+  bytes.push(ufrag.length, ...ufrag);
+  bytes.push(pwd.length, ...pwd);
+  bytes.push(...fingerprint);
+  bytes.push(candidates.length);
+
+  for (const candidate of candidates) {
+    const ipv4 = parseIpv4(candidate.address);
+    if (ipv4) {
+      bytes.push(0, ...ipv4);
+    } else {
+      const address = textEncoder.encode(candidate.address);
+      if (address.length === 0 || address.length > 255) return null;
+      bytes.push(1, address.length, ...address);
+    }
+    bytes.push((candidate.port >>> 8) & 0xff, candidate.port & 0xff);
+  }
+
+  return new Uint8Array(bytes);
+}
+
+function unpackBinary(bytes: Uint8Array): SignalPayload {
+  let cursor = 0;
+  const readByte = () => {
+    if (cursor >= bytes.length) throw new Error('Некорректный QR соединения');
+    return bytes[cursor++];
+  };
+  const readBytes = (length: number) => {
+    if (length < 0 || cursor + length > bytes.length) throw new Error('Некорректный QR соединения');
+    const value = bytes.slice(cursor, cursor + length);
+    cursor += length;
+    return value;
+  };
+
+  const flags = readByte();
+  const kind: SignalKind = (flags & 1) === 1 ? 'answer' : 'offer';
+  const setup = bitsToSetup((flags >>> 1) & 0b11);
+  const ufrag = textDecoder.decode(readBytes(readByte()));
+  const pwd = textDecoder.decode(readBytes(readByte()));
+  const fingerprint = bytesToFingerprint(readBytes(32));
+  const candidateCount = readByte();
+  if (!ufrag || !pwd || candidateCount < 1) throw new Error('Некорректный QR соединения');
+
+  const candidates: string[] = [];
+  for (let index = 0; index < candidateCount; index += 1) {
+    const addressKind = readByte();
+    let address = '';
+    if (addressKind === 0) {
+      address = Array.from(readBytes(4)).join('.');
+    } else if (addressKind === 1) {
+      address = textDecoder.decode(readBytes(readByte()));
+    } else {
+      throw new Error('Некорректный QR соединения');
+    }
+    const port = (readByte() << 8) | readByte();
+    if (!address || port < 1) throw new Error('Некорректный QR соединения');
+    const priority = Math.max(1, 2130706431 - index * 256);
+    candidates.push(`a=candidate:${index + 1} 1 udp ${priority} ${address} ${port} typ host`);
+  }
+  if (cursor !== bytes.length) throw new Error('Некорректный QR соединения');
+
+  const sdp = [
+    'v=0',
+    'o=- 0 0 IN IP4 127.0.0.1',
+    's=-',
+    't=0 0',
+    'a=group:BUNDLE 0',
+    'm=application 9 UDP/DTLS/SCTP webrtc-datachannel',
+    'c=IN IP4 0.0.0.0',
+    `a=ice-ufrag:${ufrag}`,
+    `a=ice-pwd:${pwd}`,
+    `a=fingerprint:sha-256 ${fingerprint}`,
+    `a=setup:${setup}`,
+    'a=mid:0',
+    'a=sctp-port:5000',
+    'a=max-message-size:262144',
+    ...candidates,
+    'a=end-of-candidates',
+    '',
+  ].join('\r\n');
+
+  return {
+    protocol: 2,
+    kind,
+    sdp: { type: kind, sdp },
+    sender: { id: 'pending-peer', name: 'Игрок' },
+    networkMode: 'local',
+  };
 }
 
 function candidateToCompact(line: string) {
@@ -154,11 +336,6 @@ function compactToCandidate(value: string) {
   if (parts.length < 7) throw new Error('Некорректный ICE-кандидат');
   const [foundation, component, protocol, priority, address, port, type, tcpType] = parts;
   return `a=candidate:${foundation} ${component} ${protocol} ${priority} ${address} ${port} typ ${type}${tcpType ? ` tcptype ${tcpType}` : ''}`;
-}
-
-function lineValue(lines: string[], prefix: string) {
-  const line = lines.find((item) => item.startsWith(prefix));
-  return line?.slice(prefix.length) ?? '';
 }
 
 function setupToCode(value: string): PackedSignalV3['x'] {
@@ -271,6 +448,13 @@ function unpack(value: PackedSignal): SignalPayload {
 }
 
 export async function signalToFrames(payload: SignalPayload): Promise<string[]> {
+  const binary = packBinary(payload);
+  if (binary) {
+    const single = `S4${bytesToBase45(binary)}`;
+    if (single.length <= MAX_SINGLE_QR_CHARS) return [single];
+  }
+
+  // Compatibility fallback for unusual browser SDP/candidate shapes.
   const packedValue: PackedSignal = packCompact(payload) ?? packLegacy(payload);
   const packed = await compress(JSON.stringify(packedValue));
   const codec = packed.codec === 'g' ? 'G' : 'R';
@@ -294,10 +478,14 @@ export class FrameAssembler {
   private pending = new Map<string, PendingChunks>();
 
   async add(raw: string): Promise<{ payload: SignalPayload | null; progress: FrameProgress | null }> {
-    // Base45 legitimately uses the space character. Strip only line breaks
-    // around a manually pasted frame; trim() would corrupt valid payloads.
+    // Base45 legitimately uses the space character. Strip only line breaks around a pasted frame.
     const value = raw.replace(/^[\r\n]+|[\r\n]+$/g, '');
     try {
+      if (value.startsWith('S4') && value.length > 2) {
+        const payload = unpackBinary(base45ToBytes(value.slice(2)));
+        return { payload, progress: { sessionId: 'single', received: 1, total: 1 } };
+      }
+
       // Backward compatibility with the temporary multi-QR format.
       if (value.startsWith('S2C') && value.length > 12) {
         const codec = value[3].toLowerCase();
