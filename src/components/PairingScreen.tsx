@@ -27,7 +27,7 @@ import {
   IconWorld,
 } from '@tabler/icons-react';
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
-import { boardSizes, difficultyLabels } from '../game/engine';
+import { boardSizes, difficulties, difficultyLabels, regionDimensions } from '../game/engine';
 import { playerColors } from '../game/playerColors';
 import type { BoardSize, Difficulty, Player, PlayerColor } from '../game/types';
 import { PeerSession, type PeerRole, type PeerState } from '../multiplayer/peer';
@@ -70,6 +70,7 @@ export function PairingScreen({ initialName, initialColor, deviceId, reconnectMo
   const [localPlayer, setLocalPlayer] = useState<Player | null>(null);
   const sessionRef = useRef<PeerSession | null>(null);
   const handedOff = useRef(false);
+  const region = regionDimensions(size);
 
   const changeColor = (next: PlayerColor) => {
     setColor(next);
@@ -171,14 +172,7 @@ export function PairingScreen({ initialName, initialColor, deviceId, reconnectMo
               <Text size="sm" fw={600}>Твой цвет</Text>
               <Group gap="sm" className="player-color-picker">
                 {playerColors.map((item) => (
-                  <UnstyledButton
-                    key={item.value}
-                    className="player-color-button"
-                    style={{ '--swatch': item.hex } as CSSProperties}
-                    aria-label={item.label}
-                    aria-pressed={color === item.value}
-                    onClick={() => changeColor(item.value)}
-                  ><span /></UnstyledButton>
+                  <UnstyledButton key={item.value} className="player-color-button" style={{ '--swatch': item.hex } as CSSProperties} aria-label={item.label} aria-pressed={color === item.value} onClick={() => changeColor(item.value)}><span /></UnstyledButton>
                 ))}
               </Group>
             </Stack>
@@ -196,8 +190,12 @@ export function PairingScreen({ initialName, initialColor, deviceId, reconnectMo
             <Stack gap={5}><Title order={2}>{reconnectMode ? 'Настрой соединение' : 'Настрой игру'}</Title><Text c="dimmed">{reconnectMode ? 'Размер и сложность уже сохранены в текущей партии.' : 'Создатель выбирает размер, сложность и способ соединения.'}</Text></Stack>
             {!reconnectMode && (
               <>
-                <Stack gap={7}><Text fw={700}>Размер поля</Text><SimpleGrid cols={4} spacing="xs">{boardSizes.map((value) => <Button key={value} variant={size === value ? 'light' : 'default'} color="indigo" radius="md" onClick={() => setSize(value)} aria-pressed={size === value}>{value}×{value}</Button>)}</SimpleGrid>{size === 5 && <Text size="xs" c="dimmed">5×5 использует пять неровных областей по пять клеток.</Text>}</Stack>
-                <SimpleGrid cols={2} spacing="sm">{(Object.keys(difficultyLabels) as Difficulty[]).map((key) => <UnstyledButton key={key} onClick={() => setDifficulty(key)} className="difficulty-choice"><Paper radius="lg" p="md" shadow="xs" className={difficulty === key ? 'difficulty-card active' : 'difficulty-card'}><Text fw={700}>{difficultyLabels[key]}</Text><Text size="xs" c="dimmed">{difficultyDescription(key)}</Text></Paper></UnstyledButton>)}</SimpleGrid>
+                <Stack gap={7}>
+                  <Text fw={700}>Размер поля</Text>
+                  <SimpleGrid cols={4} spacing="xs">{boardSizes.map((value) => <Button key={value} variant={size === value ? 'light' : 'default'} color="indigo" radius="md" onClick={() => setSize(value)} aria-pressed={size === value}>{value}×{value}</Button>)}</SimpleGrid>
+                  <Text size="xs" c="dimmed">Блоки {region.rows}×{region.cols}. В полях больше 9×9 после цифры 9 идут буквы.</Text>
+                </Stack>
+                <SimpleGrid cols={{ base: 2, xs: 3 }} spacing="sm">{difficulties.map((key) => <UnstyledButton key={key} onClick={() => setDifficulty(key)} className="difficulty-choice"><Paper radius="lg" p="md" shadow="xs" className={difficulty === key ? 'difficulty-card active' : 'difficulty-card'}><Text fw={700}>{difficultyLabels[key]}</Text><Text size="xs" c="dimmed">{difficultyDescription(key)}</Text></Paper></UnstyledButton>)}</SimpleGrid>
               </>
             )}
             <Paper radius="xl" p="md" shadow="xs"><Stack gap="sm"><Text fw={700}>Соединение</Text><SegmentedControl fullWidth radius="xl" value={networkMode} onChange={(value: string) => setNetworkMode(value as NetworkMode)} data={[{ label: 'Одна Wi‑Fi сеть', value: 'local' }, { label: 'Через интернет', value: 'internet-assisted' }]} /><Group gap="xs" align="flex-start" wrap="nowrap"><ThemeIcon variant="light" color={networkMode === 'local' ? 'indigo' : 'cyan'} size="sm" radius="xl">{networkMode === 'local' ? <IconWifi size={14} /> : <IconWorld size={14} />}</ThemeIcon><Text size="xs" c="dimmed">{networkMode === 'local' ? 'Прямое соединение внутри одной сети.' : 'STUN помогает найти прямой сетевой маршрут. Игровые данные через него не передаются.'}</Text></Group></Stack></Paper>
@@ -222,8 +220,10 @@ function stateLabel(state: PeerState) {
 }
 
 function difficultyDescription(value: Difficulty) {
-  if (value === 'easy') return 'Больше стартовых цифр';
+  if (value === 'easy') return 'Много стартовых символов';
   if (value === 'medium') return 'Спокойная партия';
   if (value === 'hard') return 'Нужно больше заметок';
-  return 'Минимум очевидных ходов';
+  if (value === 'expert') return 'Мало очевидных ходов';
+  if (value === 'legendary') return 'Длинные цепочки решений';
+  return 'Максимум логики и терпения';
 }
