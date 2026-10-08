@@ -1,7 +1,8 @@
+import { DataConnection, Peer } from 'peerjs';
 import type { Player } from '../game/types';
-import type { NetworkMode, SignalPayload } from './signaling';
 import type { WireMessage } from './protocol';
 import { parseMessage } from './protocol';
+import { roomCodeToPeerId } from './signaling';
 
 export type PeerRole = 'host' | 'guest';
 export type PeerState = 'idle' | 'gathering' | 'waiting' | 'connecting' | 'connected' | 'disconnected' | 'failed' | 'closed';
@@ -10,31 +11,19 @@ export type PeerCallbacks = {
   onState?: (state: PeerState) => void;
   onMessage?: (message: WireMessage) => void;
   onLatency?: (ms: number | null) => void;
+  onRemotePlayer?: (player: Player) => void;
 };
 
-function rtcConfig(mode: NetworkMode): RTCConfiguration {
-  if (mode === 'internet-assisted') return { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
-  return { iceServers: [] };
-}
-
-async function waitForIceGathering(peer: RTCPeerConnection, timeoutMs = 8000): Promise<void> {
-  if (peer.iceGatheringState === 'complete') return;
-  await new Promise<void>((resolve) => {
-    const timer = window.setTimeout(resolve, timeoutMs);
-    const listener = () => {
-      if (peer.iceGatheringState === 'complete') {
-        window.clearTimeout(timer);
-        peer.removeEventListener('icegatheringstatechange', listener);
-        resolve();
-      }
-    };
-    peer.addEventListener('icegatheringstatechange', listener);
-  });
-}
+const peerOptions = {
+  debug: 0,
+  config: {
+    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+  },
+};
 
 export class PeerSession {
-  private peer: RTCPeerConnection | null = null;
-  private channel: RTCDataChannel | null = null;
+  private peer: Peer | null = null;
+  private connection: DataConnection | null = null;
   private pingTimer: number | null = null;
   private callbacks: PeerCallbacks;
   private localPlayer: Player;
@@ -53,34 +42,38 @@ export class PeerSession {
     this.callbacks.onState?.(state);
   }
 
-  private buildPeer(mode: NetworkMode) {
-    this.closePeerOnly();
-    const peer = new RTCPeerConnection(rtcConfig(mode));
-    this.peer = peer;
-    peer.addEventListener('connectionstatechange', () => {
-      const current = peer.connectionState;
-      if (current === 'connected') this.setState('connected');
-      else if (current === 'disconnected') this.setState('disconnected');
-      else if (current === 'failed') this.setState('failed');
-      else if (current === 'closed') this.setState('closed');
-      else if (current === 'connecting') this.setState('connecting');
+  private bindPeer(peer: Peer) {
+    peer.on('error', (rawError) => {
+      const error = rawError as Error & { type?: string };
+      if (error.type === 'unavailable-id') return;
+      this.setState('failed');
     });
-    return peer;
+    peer.on('close', () => {
+      if (this.state !== 'closed') this.setState('closed');
+    });
   }
 
-  private attachChannel(channel: RTCDataChannel) {
-    this.channel = channel;
-    channel.addEventListener('open', () => {
+  private attachConnection(connection: DataConnection) {
+    if (this.connection && this.connection.open) {
+      connection.close();
+      return;
+    }
+    this.connection = connection;
+    const metadata = connection.metadata as Player | undefined;
+    if (metadata?.id && metadata?.name) this.callbacks.onRemotePlayer?.(metadata);
+
+    connection.on('open', () => {
       this.setState('connected');
       this.send({ type: 'hello', player: this.localPlayer });
       this.startPing();
     });
-    channel.addEventListener('close', () => this.setState('disconnected'));
-    channel.addEventListener('error', () => this.setState('failed'));
-    channel.addEventListener('message', (event) => {
-      if (typeof event.data !== 'string') return;
-      const message = parseMessage(event.data);
+    connection.on('close', () => this.setState('disconnected'));
+    connection.on('error', () => this.setState('failed'));
+    connection.on('data', (data) => {
+      if (typeof data !== 'string') return;
+      const message = parseMessage(data);
       if (!message) return;
+      if (message.type === 'hello') this.callbacks.onRemotePlayer?.(message.player);
       if (message.type === 'ping') {
         this.send({ type: 'pong', at: message.at });
         return;
@@ -93,55 +86,68 @@ export class PeerSession {
     });
   }
 
-  async createOffer(mode: NetworkMode): Promise<SignalPayload> {
-    const peer = this.buildPeer(mode);
+  async createRoom(code: string): Promise<void> {
+    this.closePeerOnly();
     this.setState('gathering');
-    this.attachChannel(peer.createDataChannel('sudoku', { ordered: true }));
-    const offer = await peer.createOffer();
-    await peer.setLocalDescription(offer);
-    await waitForIceGathering(peer);
+    const peerId = roomCodeToPeerId(code);
+    const peer = new Peer(peerId, peerOptions);
+    this.peer = peer;
+    this.bindPeer(peer);
+
+    await new Promise<void>((resolve, reject) => {
+      const onOpen = () => {
+        peer.off('error', onError);
+        resolve();
+      };
+      const onError = (rawError: unknown) => {
+        const error = rawError as Error & { type?: string };
+        if (error.type === 'unavailable-id') {
+          peer.off('open', onOpen);
+          reject(new Error('Этот код уже занят'));
+        }
+      };
+      peer.once('open', onOpen);
+      peer.on('error', onError);
+    });
+
+    peer.on('connection', (connection) => this.attachConnection(connection));
     this.setState('waiting');
-    if (!peer.localDescription) throw new Error('Не удалось создать предложение соединения');
-    return {
-      protocol: 1,
-      kind: 'offer',
-      sdp: peer.localDescription.toJSON(),
-      sender: { id: this.localPlayer.id, name: this.localPlayer.name, color: this.localPlayer.color },
-      networkMode: mode,
-    };
   }
 
-  async acceptOfferAndCreateAnswer(offer: SignalPayload): Promise<SignalPayload> {
-    if (offer.kind !== 'offer') throw new Error('Ожидалось предложение соединения');
-    const peer = this.buildPeer(offer.networkMode);
-    this.setState('connecting');
-    peer.addEventListener('datachannel', (event) => this.attachChannel(event.channel), { once: true });
-    await peer.setRemoteDescription(offer.sdp);
-    const answer = await peer.createAnswer();
-    await peer.setLocalDescription(answer);
+  async joinRoom(code: string): Promise<void> {
+    this.closePeerOnly();
     this.setState('gathering');
-    await waitForIceGathering(peer);
-    this.setState('waiting');
-    if (!peer.localDescription) throw new Error('Не удалось создать ответ соединения');
-    return {
-      protocol: 1,
-      kind: 'answer',
-      sdp: peer.localDescription.toJSON(),
-      sender: { id: this.localPlayer.id, name: this.localPlayer.name, color: this.localPlayer.color },
-      networkMode: offer.networkMode,
-    };
-  }
+    const peer = new Peer(peerOptions);
+    this.peer = peer;
+    this.bindPeer(peer);
 
-  async acceptAnswer(answer: SignalPayload) {
-    if (answer.kind !== 'answer') throw new Error('Ожидался ответ соединения');
-    if (!this.peer) throw new Error('Сначала нужно создать комнату');
+    await new Promise<void>((resolve, reject) => {
+      const timer = window.setTimeout(() => reject(new Error('Не удалось открыть соединение')), 8000);
+      peer.once('open', () => {
+        window.clearTimeout(timer);
+        resolve();
+      });
+      peer.once('error', (error) => {
+        window.clearTimeout(timer);
+        reject(error);
+      });
+    });
+
     this.setState('connecting');
-    await this.peer.setRemoteDescription(answer.sdp);
+    const connection = peer.connect(roomCodeToPeerId(code), {
+      metadata: this.localPlayer,
+      serialization: 'json',
+    });
+    this.attachConnection(connection);
+
+    window.setTimeout(() => {
+      if (this.state === 'connecting') this.setState('failed');
+    }, 12000);
   }
 
   send(message: WireMessage): boolean {
-    if (!this.channel || this.channel.readyState !== 'open') return false;
-    this.channel.send(JSON.stringify(message));
+    if (!this.connection || !this.connection.open) return false;
+    this.connection.send(JSON.stringify(message));
     return true;
   }
 
@@ -155,9 +161,9 @@ export class PeerSession {
   private closePeerOnly() {
     if (this.pingTimer) window.clearInterval(this.pingTimer);
     this.pingTimer = null;
-    this.channel?.close();
-    this.channel = null;
-    this.peer?.close();
+    this.connection?.close();
+    this.connection = null;
+    this.peer?.destroy();
     this.peer = null;
   }
 
