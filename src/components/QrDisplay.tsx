@@ -2,7 +2,7 @@ import { Box, Group, Image, Paper, Progress, Stack, Text } from '@mantine/core';
 import { useQrFrames } from '../hooks/useQrFrames';
 
 export function QrDisplay({ frames, label }: { frames: string[]; label: string }) {
-  const { index, dataUrl } = useQrFrames(frames);
+  const { index, dataUrl } = useQrFrames(frames, 1650);
   const total = Math.max(frames.length, 1);
   return (
     <Stack gap="sm" align="center">
@@ -14,7 +14,7 @@ export function QrDisplay({ frames, label }: { frames: string[]; label: string }
         {frames.length > 1 && <Text size="sm" fw={650}>{index + 1}/{frames.length}</Text>}
       </Group>
       {frames.length > 1 && <Progress value={((index + 1) / total) * 100} w="min(68vw, 280px)" radius="xl" size="xs" />}
-      {frames.length > 1 && <Text size="xs" c="dimmed" ta="center">Код меняется сам. Второй телефон соберёт все части по очереди.</Text>}
+      {frames.length > 1 && <Text size="xs" c="dimmed" ta="center">QR разделён на несколько простых частей, поэтому квадраты крупнее. Просто держи второй телефон на экране — части сменятся сами.</Text>}
     </Stack>
   );
 }
