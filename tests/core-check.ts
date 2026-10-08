@@ -6,8 +6,8 @@ function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
 }
 
-const difficulties: Difficulty[] = ['easy', 'medium', 'hard', 'expert'];
-const sizes: BoardSize[] = [4, 5, 6, 9];
+const difficulties: Difficulty[] = ['easy', 'medium', 'hard', 'expert', 'legendary', 'epic'];
+const sizes: BoardSize[] = [9, 12, 15, 18];
 
 for (const size of sizes) {
   const generated = generatePuzzle('medium', size, `test-size-${size}-2026`);
@@ -26,7 +26,7 @@ for (const difficulty of difficulties) {
   assert(countSolutions(generated.puzzle, 2) === 1, `${difficulty}: puzzle must have one solution`);
 }
 
-const game = createGame('easy', ['a', 'b'], 6, 'session-test', 1_000);
+const game = createGame('easy', ['a', 'b'], 12, 'session-test', 1_000);
 let emptyRow = -1;
 let emptyCol = -1;
 for (let r = 0; r < game.size && emptyRow < 0; r += 1) {
@@ -36,7 +36,7 @@ for (let r = 0; r < game.size && emptyRow < 0; r += 1) {
 }
 assert(emptyRow >= 0 && emptyCol >= 0, 'generated game must have an editable cell');
 const correct = game.solution[emptyRow][emptyCol] as Digit;
-const wrong = ([1,2,3,4,5,6] as Digit[]).find((d) => d !== correct)!;
+const wrong = Array.from({ length: game.size }, (_, index) => index + 1).find((d) => d !== correct)!;
 
 const noted = applyGameAction(game, { type: 'note', playerId: 'a', row: emptyRow, col: emptyCol, digit: correct }, 1_200);
 assert(noted.accepted && noted.snapshot.notes[emptyRow][emptyCol].includes(correct), 'note must be added');
@@ -57,8 +57,8 @@ assert(resumed.snapshot.totalPausedMs === 1_000, 'resume must add paused duratio
 assert(elapsedMs(resumed.snapshot, 4_000) === 2_000, 'timer must exclude paused duration');
 
 const possible = candidates(game.board, emptyRow, emptyCol);
-assert(possible.includes(correct), 'solution digit must be a candidate in untouched puzzle');
+assert(possible.includes(correct), 'solution symbol must be a candidate in untouched puzzle');
 const hint = findHint(game.board);
 if (hint) assert(game.board[hint.cell.row][hint.cell.col] === 0, 'hint must point to an empty cell');
 
-console.log('Core checks passed for 4x4, 5x5, 6x6, 9x9 and game-state scenarios.');
+console.log('Core checks passed for 9x9, 12x12, 15x15, 18x18 and six difficulty levels.');
