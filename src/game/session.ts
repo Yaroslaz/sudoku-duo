@@ -1,6 +1,6 @@
 import { boardMatchesSolution, cloneBoard, cloneNotes, emptyNotes, generatePuzzle, removePeerNotes } from './engine';
 import { initialScore, scoreCorrect, scoreHint, scoreMistake } from './scoring';
-import type { Board, Coordinate, Difficulty, Digit, GameSnapshot, PlayerScore } from './types';
+import type { Board, BoardSize, Coordinate, Difficulty, Digit, GameSnapshot, PlayerScore } from './types';
 
 export type GameAction =
   | { type: 'set'; playerId: string; row: number; col: number; digit: Digit }
@@ -17,18 +17,19 @@ export type ActionResult = {
   completed?: boolean;
 };
 
-export function createGame(difficulty: Difficulty, playerIds: string[], seed?: string, now = Date.now()): GameSnapshot {
-  const generated = generatePuzzle(difficulty, seed);
+export function createGame(difficulty: Difficulty, playerIds: string[], size: BoardSize = 9, seed?: string, now = Date.now()): GameSnapshot {
+  const generated = generatePuzzle(difficulty, size, seed);
   const scores: Record<string, PlayerScore> = {};
   for (const id of playerIds) scores[id] = initialScore();
   return {
     version: 1,
     id: generated.seed,
+    size,
     difficulty,
     puzzle: generated.puzzle,
     solution: generated.solution,
     board: cloneBoard(generated.puzzle),
-    notes: emptyNotes(),
+    notes: emptyNotes(size),
     startedAt: now,
     pausedAt: null,
     totalPausedMs: 0,
@@ -73,12 +74,10 @@ export function applyGameAction(snapshot: GameSnapshot, action: GameAction, now 
     return { snapshot: next, accepted: true };
   }
 
-  if (next.pausedAt !== null || !editable(next, action.row, action.col)) {
-    return { snapshot, accepted: false };
-  }
+  if (next.pausedAt !== null || !editable(next, action.row, action.col)) return { snapshot, accepted: false };
 
   if (action.type === 'note') {
-    if (next.board[action.row][action.col] !== 0) return { snapshot, accepted: false };
+    if (next.board[action.row][action.col] !== 0 || action.digit > next.size) return { snapshot, accepted: false };
     const cell = next.notes[action.row][action.col];
     next.notes[action.row][action.col] = cell.includes(action.digit)
       ? cell.filter((digit) => digit !== action.digit)
@@ -92,6 +91,7 @@ export function applyGameAction(snapshot: GameSnapshot, action: GameAction, now 
     return { snapshot: next, accepted: true };
   }
 
+  if (action.digit > next.size) return { snapshot, accepted: false };
   const correct = next.solution[action.row][action.col] === action.digit;
   next.board[action.row][action.col] = action.digit;
   next.notes[action.row][action.col] = [];
@@ -99,9 +99,7 @@ export function applyGameAction(snapshot: GameSnapshot, action: GameAction, now 
     ? scoreCorrect(ensureScore(next, action.playerId))
     : scoreMistake(ensureScore(next, action.playerId));
 
-  if (correct) {
-    next.notes = removePeerNotes(next.notes, action.row, action.col, action.digit);
-  }
+  if (correct) next.notes = removePeerNotes(next.notes, action.row, action.col, action.digit);
 
   const completed = boardMatchesSolution(next.board, next.solution);
   if (completed) next.completedAt = now;
@@ -123,10 +121,10 @@ export function snapshotForStorage(snapshot: GameSnapshot): GameSnapshot {
 
 export function sanitizeSnapshot(value: unknown): GameSnapshot | null {
   if (!value || typeof value !== 'object') return null;
-  const candidate = value as Partial<GameSnapshot>;
-  const isBoard = (board: Board | undefined) => Array.isArray(board) && board.length === 9 && board.every((row) => Array.isArray(row) && row.length === 9);
-  if (candidate.version !== 1 || typeof candidate.id !== 'string' || !isBoard(candidate.puzzle) || !isBoard(candidate.solution) || !isBoard(candidate.board)) {
-    return null;
-  }
-  return candidate as GameSnapshot;
+  const candidate = value as Partial<GameSnapshot> & { size?: BoardSize };
+  const size = candidate.size ?? 9;
+  const allowedSize = size === 4 || size === 5 || size === 6 || size === 9;
+  const isBoard = (board: Board | undefined) => allowedSize && Array.isArray(board) && board.length === size && board.every((row) => Array.isArray(row) && row.length === size);
+  if (candidate.version !== 1 || typeof candidate.id !== 'string' || !isBoard(candidate.puzzle) || !isBoard(candidate.solution) || !isBoard(candidate.board)) return null;
+  return { ...candidate, size } as GameSnapshot;
 }
