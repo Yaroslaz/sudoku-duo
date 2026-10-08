@@ -10,12 +10,35 @@ import App from './App';
 
 const APP_VERSION = __APP_VERSION__;
 const SW_RELOAD_KEY = 'sudoku-duo-sw-reload-version';
+const APP_SCOPE_MARKER = '/sudoku-duo/';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />
   </StrictMode>,
 );
+
+async function removeSudokuCaches() {
+  if (!('caches' in window)) return;
+  const keys = await caches.keys();
+  await Promise.all(keys.filter((key) => key.startsWith('sudoku-duo-')).map((key) => caches.delete(key)));
+}
+
+async function hardRefreshToVersion(version: string) {
+  const registrations = await navigator.serviceWorker.getRegistrations();
+  await Promise.all(
+    registrations
+      .filter((registration) => registration.scope.includes(APP_SCOPE_MARKER))
+      .map((registration) => registration.unregister()),
+  );
+  await removeSudokuCaches();
+  sessionStorage.removeItem(SW_RELOAD_KEY);
+
+  const url = new URL(window.location.href);
+  url.searchParams.set('v', version);
+  url.searchParams.set('fresh', Date.now().toString(36));
+  window.location.replace(url.toString());
+}
 
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   let reloadingForUpdate = false;
@@ -36,6 +59,14 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
   });
 
   window.addEventListener('load', () => {
+    void fetch(`./version.json?t=${Date.now()}`, { cache: 'no-store' })
+      .then((response) => response.ok ? response.json() as Promise<{ version?: string }> : null)
+      .then((data) => {
+        if (data?.version && data.version !== APP_VERSION) return hardRefreshToVersion(data.version);
+        return undefined;
+      })
+      .catch(() => undefined);
+
     navigator.serviceWorker
       .register(`./sw.js?v=${APP_VERSION}`, { updateViaCache: 'none' })
       .then(async (registration) => {
