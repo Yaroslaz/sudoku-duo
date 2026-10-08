@@ -77,7 +77,7 @@ export function applyGameAction(snapshot: GameSnapshot, action: GameAction, now 
   if (next.pausedAt !== null || !editable(next, action.row, action.col)) return { snapshot, accepted: false };
 
   if (action.type === 'note') {
-    if (next.board[action.row][action.col] !== 0 || action.digit > next.size) return { snapshot, accepted: false };
+    if (next.board[action.row][action.col] !== 0 || action.digit < 1 || action.digit > next.size) return { snapshot, accepted: false };
     const cell = next.notes[action.row][action.col];
     next.notes[action.row][action.col] = cell.includes(action.digit)
       ? cell.filter((digit) => digit !== action.digit)
@@ -91,7 +91,7 @@ export function applyGameAction(snapshot: GameSnapshot, action: GameAction, now 
     return { snapshot: next, accepted: true };
   }
 
-  if (action.digit > next.size) return { snapshot, accepted: false };
+  if (action.digit < 1 || action.digit > next.size) return { snapshot, accepted: false };
   const correct = next.solution[action.row][action.col] === action.digit;
   next.board[action.row][action.col] = action.digit;
   next.notes[action.row][action.col] = [];
@@ -123,7 +123,7 @@ export function sanitizeSnapshot(value: unknown): GameSnapshot | null {
   if (!value || typeof value !== 'object') return null;
   const candidate = value as Partial<GameSnapshot> & { size?: BoardSize };
   const size = candidate.size ?? 9;
-  const allowedSize = size === 4 || size === 5 || size === 6 || size === 9;
+  const allowedSize = size === 9 || size === 12 || size === 15 || size === 18;
   const isBoard = (board: Board | undefined) => allowedSize && Array.isArray(board) && board.length === size && board.every((row) => Array.isArray(row) && row.length === size);
   if (candidate.version !== 1 || typeof candidate.id !== 'string' || !isBoard(candidate.puzzle) || !isBoard(candidate.solution) || !isBoard(candidate.board)) return null;
   return { ...candidate, size } as GameSnapshot;
