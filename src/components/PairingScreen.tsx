@@ -119,7 +119,12 @@ export function PairingScreen({ initialName, initialColor, deviceId, reconnectMo
 
   const makeLocalSession = (nextRole: PeerRole) => {
     const player = preparePlayer(nextRole);
-    const session = new PeerSession(player, { onState: setPeerState });
+    const session = new PeerSession(player, {
+      onState: setPeerState,
+      onMessage: (message) => {
+        if (message.type === 'hello') setRemote(message.player);
+      },
+    });
     sessionRef.current = session;
     return session;
   };
@@ -174,7 +179,6 @@ export function PairingScreen({ initialName, initialColor, deviceId, reconnectMo
     setShareStatus('');
     try {
       const session = makeLocalSession('guest');
-      setRemote({ id: offer.sender.id, name: offer.sender.name, color: offer.sender.color ?? 'orange' });
       const answer = await session.acceptOfferAndCreateAnswer(offer);
       setFrames(await signalToFrames(answer));
       setPhase('guest-answer');
@@ -187,7 +191,6 @@ export function PairingScreen({ initialName, initialColor, deviceId, reconnectMo
   const acceptAnswer = async (answer: SignalPayload) => {
     setError('');
     try {
-      setRemote({ id: answer.sender.id, name: answer.sender.name, color: answer.sender.color ?? 'orange' });
       const session = sessionRef.current;
       if (!(session instanceof PeerSession)) throw new Error('Локальное соединение уже закрыто');
       await session.acceptAnswer(answer);
@@ -256,10 +259,9 @@ export function PairingScreen({ initialName, initialColor, deviceId, reconnectMo
     const code = signalToCopyCode(frames);
     if (!code) return;
     setShareStatus('');
-    const text = `Sudoku duo — резервный код локального подключения:\n${code}`;
     try {
       if (navigator.share) {
-        await navigator.share({ title: 'Sudoku duo', text });
+        await navigator.share({ text: code });
         setShareStatus('Код отправлен');
       } else {
         await navigator.clipboard.writeText(code);
@@ -423,7 +425,7 @@ export function PairingScreen({ initialName, initialColor, deviceId, reconnectMo
 
         {phase === 'host-offer' && (
           <>
-            <Stack gap={5}><Title order={2}>Покажи QR другу</Title><Text c="dimmed">На втором телефоне открой «Присоединиться» и держи камеру на экране, пока считаются все части.</Text></Stack>
+            <Stack gap={5}><Title order={2}>Покажи QR другу</Title><Text c="dimmed">На втором телефоне открой «Присоединиться» и отсканируй один код.</Text></Stack>
             <QrDisplay frames={frames} label="Приглашение в игру" />
             <Group grow gap="xs">
               <CopyButton value={copyCode}>{({ copied, copy }) => <Button variant="subtle" radius="xl" leftSection={copied ? <IconCheck size={17} /> : <IconCopy size={17} />} onClick={copy}>{copied ? 'Скопировано' : 'Скопировать'}</Button>}</CopyButton>
@@ -436,21 +438,21 @@ export function PairingScreen({ initialName, initialColor, deviceId, reconnectMo
 
         {phase === 'host-answer' && (
           <>
-            <Stack gap={5}><Title order={2}>Отсканируй ответ</Title><Text c="dimmed">На втором телефоне появился ответ. Держи камеру, пока считаются все части QR.</Text></Stack>
+            <Stack gap={5}><Title order={2}>Отсканируй ответ</Title><Text c="dimmed">На втором телефоне появился ответ. Отсканируй один QR.</Text></Stack>
             <QrScanner expectedKind="answer" onSignal={(signal) => void acceptAnswer(signal)} />
           </>
         )}
 
         {phase === 'guest-offer' && (
           <>
-            <Stack gap={5}><Title order={2}>Сканируй приглашение</Title><Text c="dimmed">Наведи камеру на QR первого телефона и подержи её до завершения.</Text></Stack>
+            <Stack gap={5}><Title order={2}>Сканируй приглашение</Title><Text c="dimmed">Наведи камеру на один QR первого телефона.</Text></Stack>
             <QrScanner expectedKind="offer" onSignal={(signal) => void acceptOffer(signal)} />
           </>
         )}
 
         {phase === 'guest-answer' && (
           <>
-            <Stack gap={5}><Title order={2}>Покажи ответ</Title><Text c="dimmed">Теперь первый телефон должен считать все части ответа.</Text></Stack>
+            <Stack gap={5}><Title order={2}>Покажи ответ</Title><Text c="dimmed">Теперь первый телефон должен отсканировать один QR ответа.</Text></Stack>
             <QrDisplay frames={frames} label="Ответ на приглашение" />
             <Group grow gap="xs">
               <CopyButton value={copyCode}>{({ copied, copy }) => <Button variant="subtle" radius="xl" leftSection={copied ? <IconCheck size={17} /> : <IconCopy size={17} />} onClick={copy}>{copied ? 'Скопировано' : 'Скопировать'}</Button>}</CopyButton>
