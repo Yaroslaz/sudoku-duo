@@ -5,6 +5,7 @@
 
 .app-bg .mantine-ThemeIcon-root,
 .app-bg .mantine-ActionIcon-root {
+  position: relative !important;
   display: inline-grid !important;
   place-items: center !important;
   align-items: center !important;
@@ -14,12 +15,52 @@
   vertical-align: middle;
 }
 
+/* Dedicated icon wrappers use absolute centering. This avoids browser/Mantine
+   inline metrics moving an SVG inside an otherwise centered circular wrapper. */
+.app-bg .mantine-ThemeIcon-root > svg,
+.app-bg .mantine-ActionIcon-root > svg {
+  position: absolute !important;
+  left: 50% !important;
+  top: 50% !important;
+  margin: 0 !important;
+  inset-inline: auto !important;
+  inset-block: auto !important;
+  translate: none !important;
+  transform: translate(-50%, -50%) !important;
+  transform-origin: center !important;
+  transform-box: fill-box;
+  display: block !important;
+  flex: 0 0 auto !important;
+}
+
+/* Alert icons need the same treatment: Mantine's icon slot has its own
+   inline/flex metrics and was visibly pushing Wi-Fi and info icons left. */
+.app-bg .mantine-Alert-icon {
+  position: relative !important;
+  display: block !important;
+  flex: 0 0 auto !important;
+  align-self: center !important;
+  line-height: 0 !important;
+}
+
+.app-bg .mantine-Alert-icon > svg {
+  position: absolute !important;
+  left: 50% !important;
+  top: 50% !important;
+  margin: 0 !important;
+  inset-inline: auto !important;
+  inset-block: auto !important;
+  translate: none !important;
+  transform: translate(-50%, -50%) !important;
+  transform-origin: center !important;
+  transform-box: fill-box;
+  display: block !important;
+  flex: 0 0 auto !important;
+}
+
 /* Center icons only inside dedicated icon wrappers. Do not touch arbitrary SVGs
    inside flex controls such as dropdown chevrons. */
-.app-bg .mantine-ThemeIcon-root > svg,
-.app-bg .mantine-ActionIcon-root > svg,
 .app-bg .mantine-Button-section > svg,
-.app-bg .mantine-Alert-icon > svg,
 .app-bg .mantine-Menu-itemSection > svg,
 .app-bg .reference-connection > svg,
 .app-bg .history-button > svg,
@@ -69,15 +110,11 @@
 
 .reference-game .reference-header-action > svg,
 .reference-game .reference-tool > svg {
-  position: static !important;
+  position: absolute !important;
+  left: 50% !important;
+  top: 50% !important;
   margin: 0 !important;
-}
-
-.pairing-screen .mantine-Alert-icon {
-  display: grid !important;
-  place-items: center !important;
-  align-self: center !important;
-  line-height: 0 !important;
+  transform: translate(-50%, -50%) !important;
 }
 
 .reference-game .history-controls {
