@@ -3,58 +3,30 @@ import { IconArrowsHorizontal, IconArrowsVertical, IconLayoutGrid, IconPencil, I
 import type { ReactNode } from 'react';
 
 const techniqueGroups = [
-  {
-    value: 'basic',
-    title: 'Базовые техники',
-    text: 'Сканирование, последняя цифра, исключение кандидатов, единственный кандидат и скрытая одиночка. На маленьких полях этого часто достаточно для всей партии.',
-  },
-  {
-    value: 'groups',
-    title: 'Пары, тройки и группы',
-    text: 'Открытые и скрытые пары, тройки и четвёрки. Если группа кандидатов заперта в таком же количестве клеток одной строки, столбца или области, эти кандидаты можно исключить из остальных клеток этой группы.',
-  },
-  {
-    value: 'locked',
-    title: 'Связь области со строкой или столбцом',
-    text: 'Pointing pairs/triples и box-line reduction: если кандидат внутри области может находиться только на одной линии, его можно убрать с продолжения этой линии; обратное рассуждение работает из линии в область.',
-  },
-  {
-    value: 'fish',
-    title: 'X-Wing, Swordfish и Jellyfish',
-    text: '«Рыбы» ищут одинаковый кандидат в двух, трёх или четырёх строках и соответствующем количестве столбцов. Когда позиции образуют замкнутый шаблон, этот кандидат удаляется из остальных клеток затронутых линий.',
-  },
-  {
-    value: 'single-digit',
-    title: 'Шаблоны одной цифры',
-    text: 'Skyscraper, Two-String Kite, Crane, Empty Rectangle и простая раскраска используют сильные связи одного кандидата между строками, столбцами и областями.',
-  },
-  {
-    value: 'wings',
-    title: 'Крылья',
-    text: 'Y-Wing, XYZ-Wing, W-Wing и более крупные WXYZ-Wing строятся на клетках с небольшим набором кандидатов. Связанные варианты гарантируют, что общий кандидат можно исключить в клетках, которые видят нужные «крылья».',
-  },
-  {
-    value: 'chains',
-    title: 'Цепочки и продвинутые техники',
-    text: 'X-Chain, XY-Chain, AIC, 3D Medusa, forcing chains, BUG+1 и уникальные прямоугольники используют последовательности сильных и слабых связей. Они нужны только для действительно сложных 9×9.',
-  },
+  { value: 'basic', title: 'Базовые техники', text: 'Сканирование, последняя цифра, исключение кандидатов, единственный кандидат и скрытая одиночка.' },
+  { value: 'groups', title: 'Пары, тройки и группы', text: 'Открытые и скрытые пары, тройки и четвёрки. Если группа кандидатов заперта в таком же количестве клеток одной строки, столбца или области, эти кандидаты можно исключить из остальных клеток.' },
+  { value: 'locked', title: 'Связь области со строкой или столбцом', text: 'Pointing pairs/triples и box-line reduction связывают кандидаты внутри области с одной линией и позволяют исключать их дальше по этой линии.' },
+  { value: 'fish', title: 'X-Wing, Swordfish и Jellyfish', text: '«Рыбы» ищут одинаковый кандидат в двух, трёх или четырёх строках и соответствующем количестве столбцов.' },
+  { value: 'single-digit', title: 'Шаблоны одного символа', text: 'Skyscraper, Two-String Kite, Crane, Empty Rectangle и простая раскраска используют сильные связи одного кандидата между строками, столбцами и областями.' },
+  { value: 'wings', title: 'Крылья', text: 'Y-Wing, XYZ-Wing, W-Wing и WXYZ-Wing строятся на клетках с небольшим набором кандидатов и позволяют исключать общий кандидат.' },
+  { value: 'chains', title: 'Цепочки и продвинутые техники', text: 'X-Chain, XY-Chain, AIC, 3D Medusa, forcing chains, BUG+1 и уникальные прямоугольники используют последовательности сильных и слабых связей.' },
 ];
 
 export function RulesModal({ opened, onClose }: { opened: boolean; onClose: () => void }) {
   return (
     <Modal opened={opened} onClose={onClose} title="Как играть" centered radius="xl" size="lg">
       <Stack gap="lg" pb="md">
-        <Text c="dimmed">Заполни поле цифрами от 1 до размера сетки. В каждой строке, столбце и выделенной области каждая цифра встречается ровно один раз.</Text>
+        <Text c="dimmed">Заполни поле полным набором символов. В каждой строке, столбце и выделенном блоке каждый символ встречается ровно один раз.</Text>
         <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="sm">
-          <RuleCard icon={<IconArrowsHorizontal size={21} />} title="Строка" text="Цифры не повторяются по горизонтали." />
-          <RuleCard icon={<IconArrowsVertical size={21} />} title="Столбец" text="Цифры не повторяются по вертикали." />
-          <RuleCard icon={<IconLayoutGrid size={21} />} title="Область" text="Каждая выделенная область тоже содержит полный набор цифр без повторов." />
+          <RuleCard icon={<IconArrowsHorizontal size={21} />} title="Строка" text="Символы не повторяются по горизонтали." />
+          <RuleCard icon={<IconArrowsVertical size={21} />} title="Столбец" text="Символы не повторяются по вертикали." />
+          <RuleCard icon={<IconLayoutGrid size={21} />} title="Блок" text="Каждый выделенный блок тоже содержит полный набор без повторов." />
         </SimpleGrid>
 
         <Paper radius="xl" p="md" className="lesson-card" shadow="xs">
           <Stack gap="xs">
             <Title order={4}>Размеры поля</Title>
-            <Text size="sm">4×4 использует цифры 1–4 и блоки 2×2. 6×6 — цифры 1–6 и блоки 2×3. 9×9 — классические блоки 3×3. В 5×5 используются пять неровных областей по пять клеток, потому что квадрат 5×5 нельзя разбить на одинаковые прямоугольные блоки.</Text>
+            <Text size="sm">9×9 использует цифры 1–9 и блоки 3×3. На 12×12, 15×15 и 18×18 после 9 используются буквы A–C, A–F и A–I. Блоки соответственно имеют размер 4×3, 5×3 и 6×3, чтобы в каждом блоке было столько же клеток, сколько символов в строке.</Text>
           </Stack>
         </Paper>
 
@@ -63,7 +35,7 @@ export function RulesModal({ opened, onClose }: { opened: boolean; onClose: () =
             <ThemeIcon variant="light" color="indigo" radius="xl" size="lg"><IconPencil size={18} /></ThemeIcon>
             <Stack gap="xs">
               <Title order={4}>Заметки</Title>
-              <Text size="sm">Записывай возможные цифры маленькими кандидатами. Долгое нажатие на цифру закрепляет её: после этого можно проводить пальцем по клеткам, быстро добавляя или удаляя одинаковый кандидат.</Text>
+              <Text size="sm">Записывай возможные символы маленькими кандидатами. Долгое нажатие закрепляет символ: после этого можно проводить пальцем по клеткам, быстро добавляя или удаляя одинаковый кандидат.</Text>
               <Box className="mini-notes"><span>1</span><span /><span>3</span><span /><span>5</span><span /><span>7</span><span /><span /></Box>
             </Stack>
           </Group>
@@ -71,7 +43,7 @@ export function RulesModal({ opened, onClose }: { opened: boolean; onClose: () =
 
         <Stack gap={6}>
           <Title order={4}>Техники решения</Title>
-          <Text size="sm" c="dimmed">Иди от простого к сложному. После каждого найденного числа сначала снова проверь простые техники — часто один ход открывает следующий.</Text>
+          <Text size="sm" c="dimmed">Иди от простого к сложному. После каждого найденного символа снова проверь базовые техники — один ход часто открывает следующий.</Text>
           <Accordion variant="separated" radius="lg">
             {techniqueGroups.map((group) => (
               <Accordion.Item key={group.value} value={group.value}>
