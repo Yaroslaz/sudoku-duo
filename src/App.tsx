@@ -11,12 +11,13 @@ import { PeerSession, type PeerRole, type PeerState } from './multiplayer/peer';
 import type { WireMessage } from './multiplayer/protocol';
 
 const theme = createTheme({
-  primaryColor: 'violet',
-  defaultRadius: 'md',
+  primaryColor: 'indigo',
+  primaryShade: 6,
+  defaultRadius: 'lg',
   fontFamily: 'Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-  headings: { fontFamily: 'Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif', fontWeight: '760' },
-  colors: {
-    violet: ['#f3f1ff', '#e8e4ff', '#d0c8ff', '#b5a7ff', '#9884f3', '#7e6ae4', '#6658d3', '#5448b4', '#473e92', '#3c3676'],
+  headings: {
+    fontFamily: 'Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+    fontWeight: '760',
   },
 });
 
