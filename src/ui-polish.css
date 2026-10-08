@@ -1,0 +1,51 @@
+.adaptive-menu-chevron {
+  transition: transform 180ms ease;
+  transform-origin: 50% 50%;
+}
+
+.adaptive-menu-chevron.opened {
+  transform: rotate(180deg);
+}
+
+.adaptive-menu-dropdown {
+  max-height: min(320px, 52dvh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.network-mode-control {
+  background: #eef1f5;
+  padding: 4px;
+}
+
+.room-code-card {
+  background: rgba(255, 255, 255, .96);
+  border-color: #dfe4ec !important;
+}
+
+.room-code-value {
+  margin: 8px 0 18px;
+  font-size: clamp(2.45rem, 13vw, 4rem);
+  line-height: 1;
+  letter-spacing: .18em;
+  padding-left: .18em;
+  color: #244f86;
+  font-variant-numeric: tabular-nums;
+  user-select: all;
+}
+
+.room-code-input input {
+  text-align: center;
+  font-size: 1.65rem;
+  font-weight: 800;
+  letter-spacing: .2em;
+  padding-left: calc(var(--input-padding-inline-start) + .2em);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 390px) {
+  .room-code-value {
+    font-size: 2.7rem;
+  }
+}
