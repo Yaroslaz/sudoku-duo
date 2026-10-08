@@ -4,11 +4,12 @@ import { GameScreen } from './components/GameScreen';
 import { HomeScreen } from './components/HomeScreen';
 import { PairingScreen, type PairingResult } from './components/PairingScreen';
 import { RulesModal } from './components/RulesModal';
-import { cloneBoard, cloneNotes } from './game/engine';
+import { applyPlayerHistoryStep, createPlayerHistoryStore, recordPlayerAction } from './game/history';
+import { normalizePlayerColor } from './game/playerColors';
 import { recordFinishedGame, rememberPartner } from './game/records';
 import { applyGameAction, createGame, type GameAction } from './game/session';
 import { getDeviceId, getSavedColor, getSavedName, loadGame, saveColor, saveGame, saveName } from './game/storage';
-import type { Board, BoardSize, Coordinate, Difficulty, GameSnapshot, MistakeLimit, NotesGrid, Player, PlayerColor } from './game/types';
+import type { BoardSize, Coordinate, Difficulty, GameSnapshot, MistakeLimit, Player, PlayerColor } from './game/types';
 import type { GamePeerSession, PeerRole, PeerState } from './multiplayer/peer';
 import type { WireMessage } from './multiplayer/protocol';
 
@@ -22,7 +23,6 @@ const theme = createTheme({
 
 type Screen = 'home' | 'pairing' | 'game';
 type RemoteCursor = { cell: Coordinate | null; notesMode: boolean } | null;
-type HistoryFrame = { board: Board; notes: NotesGrid };
 
 export default function App() {
   const deviceId = useMemo(() => getDeviceId(), []);
@@ -45,8 +45,8 @@ export default function App() {
   const roleRef = useRef<PeerRole | 'solo'>('solo');
   const playersRef = useRef<Player[]>([]);
   const localPlayerRef = useRef<Player>(localPlayer);
-  const undoRef = useRef<HistoryFrame[]>([]);
-  const redoRef = useRef<HistoryFrame[]>([]);
+  const historyRef = useRef(createPlayerHistoryStore());
+  const pausedForConnectionLossRef = useRef(false);
   const messageHandlerRef = useRef<(message: WireMessage) => void>(() => undefined);
 
   const setSnapshot = (next: GameSnapshot | null) => {
@@ -55,35 +55,14 @@ export default function App() {
   };
 
   const resetHistory = () => {
-    undoRef.current = [];
-    redoRef.current = [];
+    historyRef.current = createPlayerHistoryStore();
   };
 
-  const captureHistory = (game: GameSnapshot): HistoryFrame => ({
-    board: cloneBoard(game.board),
-    notes: cloneNotes(game.notes),
-  });
-
-  const pushUndo = (game: GameSnapshot) => {
-    undoRef.current.push(captureHistory(game));
-    if (undoRef.current.length > 100) undoRef.current.shift();
-    redoRef.current = [];
-  };
-
-  const historyStep = (kind: 'undo' | 'redo'): GameSnapshot | null => {
+  const historyStep = (kind: 'undo' | 'redo', playerId: string): GameSnapshot | null => {
     const current = snapshotRef.current;
-    if (!current || current.completedAt || current.failedAt || current.pausedAt !== null) return null;
-    const source = kind === 'undo' ? undoRef : redoRef;
-    const target = kind === 'undo' ? redoRef : undoRef;
-    const frame = source.current.pop();
-    if (!frame) return null;
-    target.current.push(captureHistory(current));
-    const next: GameSnapshot = {
-      ...current,
-      board: cloneBoard(frame.board),
-      notes: cloneNotes(frame.notes),
-      lastSeq: current.lastSeq + 1,
-    };
+    if (!current) return null;
+    const next = applyPlayerHistoryStep(historyRef.current, current, playerId, kind);
+    if (!next) return null;
     setSnapshot(next);
     return next;
   };
@@ -101,7 +80,10 @@ export default function App() {
     }
   }, [snapshot]);
 
-  const replaceOrAddPlayer = (player: Player) => {
+  const normalizePlayer = (player: Player): Player => ({ ...player, color: normalizePlayerColor(player.color) });
+
+  const replaceOrAddPlayer = (incoming: Player) => {
+    const player = normalizePlayer(incoming);
     setPlayers((current) => {
       const next = current.some((item) => item.id === player.id)
         ? current.map((item) => item.id === player.id ? player : item)
@@ -116,15 +98,18 @@ export default function App() {
     if (!current) return;
 
     if (action.type === 'undo' || action.type === 'redo') {
-      const next = historyStep(action.type);
-      if (next) peerRef.current?.send({ type: 'canonical-action', action, snapshot: next, requestId });
+      const next = historyStep(action.type, action.playerId);
+      peerRef.current?.send({ type: 'canonical-action', action, snapshot: next ?? current, requestId });
       return;
     }
 
     const canonicalAction: GameAction = action.type === 'pause' || action.type === 'resume' ? { ...action, at: Date.now() } : action;
     const result = applyGameAction(current, canonicalAction);
-    if (!result.accepted) return;
-    if (canonicalAction.type === 'set' || canonicalAction.type === 'clear' || canonicalAction.type === 'note') pushUndo(current);
+    if (!result.accepted) {
+      peerRef.current?.send({ type: 'canonical-action', action: canonicalAction, snapshot: current, requestId });
+      return;
+    }
+    recordPlayerAction(historyRef.current, current, result.snapshot, canonicalAction);
     setSnapshot(result.snapshot);
     peerRef.current?.send({ type: 'canonical-action', action: canonicalAction, snapshot: result.snapshot, requestId });
   };
@@ -132,8 +117,19 @@ export default function App() {
   const pauseForConnectionLoss = () => {
     const current = snapshotRef.current;
     if (!current || current.completedAt || current.failedAt || current.pausedAt !== null) return;
+    pausedForConnectionLossRef.current = true;
     const action: GameAction = { type: 'pause', playerId: localPlayerRef.current.id, at: Date.now() };
     setSnapshot(applyGameAction(current, action).snapshot);
+  };
+
+  const hostResumeAfterConnectionLoss = () => {
+    const current = snapshotRef.current;
+    if (!pausedForConnectionLossRef.current || !current || current.completedAt || current.failedAt || current.pausedAt === null) return current;
+    const action: GameAction = { type: 'resume', playerId: localPlayerRef.current.id, at: Date.now() };
+    const result = applyGameAction(current, action);
+    if (result.accepted) setSnapshot(result.snapshot);
+    pausedForConnectionLossRef.current = false;
+    return result.accepted ? result.snapshot : current;
   };
 
   messageHandlerRef.current = (message: WireMessage) => {
@@ -144,8 +140,10 @@ export default function App() {
     }
     if (message.type === 'snapshot') {
       setSnapshot(message.snapshot);
-      setPlayers(message.players);
-      playersRef.current = message.players;
+      const normalizedPlayers = message.players.map(normalizePlayer);
+      setPlayers(normalizedPlayers);
+      playersRef.current = normalizedPlayers;
+      if (message.snapshot.pausedAt === null) pausedForConnectionLossRef.current = false;
       return;
     }
     if (message.type === 'request-snapshot') {
@@ -167,6 +165,7 @@ export default function App() {
     peerRef.current?.close();
     peerRef.current = null;
     resetHistory();
+    pausedForConnectionLossRef.current = false;
     setPeerState(null);
     setLatency(null);
     setRemoteCursor(null);
@@ -187,6 +186,7 @@ export default function App() {
     peerRef.current?.close();
     peerRef.current = null;
     resetHistory();
+    pausedForConnectionLossRef.current = false;
     const player: Player = { id: deviceId, name: savedName || 'Ты', color: savedColor };
     const knownIds = Object.keys(game.scores);
     const restoredPlayers: Player[] = knownIds.map((id, index) => id === deviceId
@@ -210,8 +210,12 @@ export default function App() {
         setPeerState(state);
         if (state === 'disconnected' || state === 'failed') pauseForConnectionLoss();
         if (state === 'connected') {
-          if (sessionRole === 'guest') session.send({ type: 'request-snapshot' });
-          else if (snapshotRef.current) session.send({ type: 'snapshot', snapshot: snapshotRef.current, players: playersRef.current });
+          if (sessionRole === 'guest') {
+            session.send({ type: 'request-snapshot' });
+          } else {
+            const resumed = hostResumeAfterConnectionLoss();
+            if (resumed) session.send({ type: 'snapshot', snapshot: resumed, players: playersRef.current });
+          }
         }
       },
       onLatency: setLatency,
@@ -223,15 +227,18 @@ export default function App() {
     peerRef.current = result.session;
     setRole(result.role);
     roleRef.current = result.role;
-    setLocalPlayer(result.localPlayer);
-    localPlayerRef.current = result.localPlayer;
-    const nextPlayers = [result.localPlayer, result.remotePlayer];
+    const normalizedLocal = normalizePlayer(result.localPlayer);
+    const normalizedRemote = normalizePlayer(result.remotePlayer);
+    setLocalPlayer(normalizedLocal);
+    localPlayerRef.current = normalizedLocal;
+    const nextPlayers = [normalizedLocal, normalizedRemote];
     setPlayers(nextPlayers);
     playersRef.current = nextPlayers;
-    rememberPartner(result.remotePlayer);
+    rememberPartner(normalizedRemote);
     setPeerState('connected');
     setLatency(null);
     setRemoteCursor(null);
+    pausedForConnectionLossRef.current = false;
     attachSessionCallbacks(result.session, result.role);
 
     if (reconnectMode) {
@@ -260,12 +267,12 @@ export default function App() {
       const current = snapshotRef.current;
       if (!current) return;
       if (action.type === 'undo' || action.type === 'redo') {
-        historyStep(action.type);
+        historyStep(action.type, action.playerId);
         return;
       }
       const result = applyGameAction(current, action);
       if (!result.accepted) return;
-      if (action.type === 'set' || action.type === 'clear' || action.type === 'note') pushUndo(current);
+      recordPlayerAction(historyRef.current, current, result.snapshot, action);
       setSnapshot(result.snapshot);
       return;
     }
@@ -308,6 +315,7 @@ export default function App() {
     setLatency(null);
     setRemoteCursor(null);
     setReconnectMode(false);
+    pausedForConnectionLossRef.current = false;
     setSnapshot(null);
     resetHistory();
     setScreen('home');
@@ -320,8 +328,9 @@ export default function App() {
   };
 
   const updateColor = (color: PlayerColor) => {
-    setSavedColor(color);
-    saveColor(color);
+    const normalized = normalizePlayerColor(color);
+    setSavedColor(normalized);
+    saveColor(normalized);
   };
 
   return (
