@@ -55,8 +55,10 @@ export function AdaptiveMenu({
           aria-expanded={opened}
           onPointerDown={preserveScroll}
         >
-          <span>{selected?.label ?? ''}</span>
-          <IconChevronDown className={opened ? 'adaptive-menu-chevron opened' : 'adaptive-menu-chevron'} size={20} />
+          <span className="adaptive-menu-label">{selected?.label ?? ''}</span>
+          <span className="adaptive-menu-chevron-slot" aria-hidden="true">
+            <IconChevronDown className={opened ? 'adaptive-menu-chevron opened' : 'adaptive-menu-chevron'} size={20} />
+          </span>
         </UnstyledButton>
       </Menu.Target>
       <Menu.Dropdown className="difficulty-menu-dropdown adaptive-menu-dropdown">
