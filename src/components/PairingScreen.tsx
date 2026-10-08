@@ -6,7 +6,6 @@ import {
   CopyButton,
   Group,
   Paper,
-  SegmentedControl,
   SimpleGrid,
   Stack,
   Text,
@@ -23,7 +22,6 @@ import {
   IconInfoCircle,
   IconQrcode,
   IconScan,
-  IconWifi,
   IconWorld,
 } from '@tabler/icons-react';
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
@@ -31,11 +29,11 @@ import { boardSizes, difficulties, difficultyLabels, regionDimensions } from '..
 import { playerColors } from '../game/playerColors';
 import type { BoardSize, Difficulty, Player, PlayerColor } from '../game/types';
 import { PeerSession, type PeerRole, type PeerState } from '../multiplayer/peer';
-import { signalToCopyCode, signalToFrames, type NetworkMode, type SignalPayload } from '../multiplayer/signaling';
+import { createRoomCode, formatRoomCode, roomCodeToQr } from '../multiplayer/signaling';
 import { QrDisplay } from './QrDisplay';
 import { QrScanner } from './QrScanner';
 
-type Phase = 'choice' | 'host-settings' | 'host-offer' | 'host-answer' | 'guest-offer' | 'guest-answer' | 'connecting';
+type Phase = 'choice' | 'host-settings' | 'host-room' | 'guest-join' | 'connecting';
 
 export type PairingResult = {
   session: PeerSession;
@@ -61,8 +59,7 @@ export function PairingScreen({ initialName, initialColor, deviceId, reconnectMo
   const [color, setColor] = useState<PlayerColor>(initialColor);
   const [difficulty, setDifficulty] = useState<Difficulty>('medium');
   const [size, setSize] = useState<BoardSize>(9);
-  const [networkMode, setNetworkMode] = useState<NetworkMode>('local');
-  const [frames, setFrames] = useState<string[]>([]);
+  const [roomCode, setRoomCode] = useState('');
   const [peerState, setPeerState] = useState<PeerState>('idle');
   const [error, setError] = useState('');
   const [remote, setRemote] = useState<Player | null>(null);
@@ -83,7 +80,10 @@ export function PairingScreen({ initialName, initialColor, deviceId, reconnectMo
     setLocalPlayer(player);
     onNameChange(player.name);
     onColorChange(player.color);
-    const session = new PeerSession(player, { onState: setPeerState });
+    const session = new PeerSession(player, {
+      onState: setPeerState,
+      onRemotePlayer: setRemote,
+    });
     sessionRef.current = session;
     setRole(nextRole);
     return { session, player };
@@ -92,7 +92,14 @@ export function PairingScreen({ initialName, initialColor, deviceId, reconnectMo
   useEffect(() => {
     if (peerState !== 'connected' || !sessionRef.current || !role || !remote || !localPlayer || handedOff.current) return;
     handedOff.current = true;
-    onConnected({ session: sessionRef.current, role, localPlayer, remotePlayer: remote, difficulty: role === 'host' && !reconnectMode ? difficulty : null, size: role === 'host' && !reconnectMode ? size : null });
+    onConnected({
+      session: sessionRef.current,
+      role,
+      localPlayer,
+      remotePlayer: remote,
+      difficulty: role === 'host' && !reconnectMode ? difficulty : null,
+      size: role === 'host' && !reconnectMode ? size : null,
+    });
   }, [difficulty, localPlayer, onConnected, peerState, reconnectMode, remote, role, size]);
 
   useEffect(() => () => {
@@ -101,37 +108,34 @@ export function PairingScreen({ initialName, initialColor, deviceId, reconnectMo
 
   const createRoom = async () => {
     setError('');
-    try {
-      const { session } = makeSession('host');
-      const offer = await session.createOffer(networkMode);
-      setFrames(await signalToFrames(offer));
-      setPhase('host-offer');
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Не удалось создать комнату. Попробуй ещё раз.');
+    const { session } = makeSession('host');
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const code = createRoomCode();
+      try {
+        await session.createRoom(code);
+        setRoomCode(code);
+        setPhase('host-room');
+        return;
+      } catch (roomError) {
+        if (!(roomError instanceof Error) || !roomError.message.includes('занят')) {
+          setError(roomError instanceof Error ? roomError.message : 'Не удалось создать комнату');
+          return;
+        }
+      }
     }
+    setError('Не удалось подобрать свободный код. Попробуй ещё раз.');
   };
 
-  const acceptOffer = async (offer: SignalPayload) => {
+  const joinRoom = async (code: string) => {
     setError('');
     try {
       const { session } = makeSession('guest');
-      setRemote({ id: offer.sender.id, name: offer.sender.name, color: offer.sender.color ?? 'orange' });
-      const answer = await session.acceptOfferAndCreateAnswer(offer);
-      setFrames(await signalToFrames(answer));
-      setPhase('guest-answer');
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Не удалось принять приглашение. Отсканируй QR ещё раз.');
-    }
-  };
-
-  const acceptAnswer = async (answer: SignalPayload) => {
-    setError('');
-    try {
-      setRemote({ id: answer.sender.id, name: answer.sender.name, color: answer.sender.color ?? 'orange' });
-      await sessionRef.current?.acceptAnswer(answer);
+      setRoomCode(code);
       setPhase('connecting');
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Не удалось завершить подключение. Создай QR заново.');
+      await session.joinRoom(code);
+    } catch (joinError) {
+      setError(joinError instanceof Error ? joinError.message : 'Не удалось подключиться к комнате');
+      setPhase('guest-join');
     }
   };
 
@@ -139,7 +143,7 @@ export function PairingScreen({ initialName, initialColor, deviceId, reconnectMo
     sessionRef.current?.close();
     sessionRef.current = null;
     handedOff.current = false;
-    setFrames([]);
+    setRoomCode('');
     setRemote(null);
     setRole(null);
     setLocalPlayer(null);
@@ -148,7 +152,6 @@ export function PairingScreen({ initialName, initialColor, deviceId, reconnectMo
     setPhase('choice');
   };
 
-  const copyCode = signalToCopyCode(frames);
   const goBack = phase === 'choice' ? onBack : reset;
 
   return (
@@ -163,7 +166,7 @@ export function PairingScreen({ initialName, initialColor, deviceId, reconnectMo
           <>
             <Stack gap={5}>
               <Title order={1}>{reconnectMode ? 'Переподключение' : 'Игра вдвоём'}</Title>
-              <Text c="dimmed">{reconnectMode ? 'Поле уже сохранено. Создай новое соединение между теми же телефонами — после синхронизации партия останется на паузе.' : 'Соедини два телефона по QR. После подключения ходы и заметки идут напрямую между устройствами.'}</Text>
+              <Text c="dimmed">{reconnectMode ? 'Поле сохранено. Создай новое соединение или введи новый код второго телефона.' : 'Один QR или короткий код — и второй телефон подключён.'}</Text>
             </Stack>
 
             <TextInput label="Имя в игре" value={name} onChange={(e: { currentTarget: HTMLInputElement }) => setName(e.currentTarget.value)} maxLength={24} size="md" radius="lg" placeholder="Например, Ярослав" className="player-name-input" />
@@ -178,36 +181,71 @@ export function PairingScreen({ initialName, initialColor, deviceId, reconnectMo
             </Stack>
 
             <SimpleGrid cols={{ base: 1, xs: 2 }} spacing="md">
-              <UnstyledButton onClick={() => setPhase('host-settings')} className="pair-choice-button"><Paper radius="xl" p="lg" shadow="xs" className="pair-choice-card"><ThemeIcon size={48} radius="xl" color="indigo" variant="light"><IconQrcode size={23} /></ThemeIcon><Stack gap={3} mt="md"><Text fw={750}>{reconnectMode ? 'Создать новое соединение' : 'Создать игру'}</Text><Text size="sm" c="dimmed">Покажи QR второму телефону.</Text></Stack></Paper></UnstyledButton>
-              <UnstyledButton onClick={() => setPhase('guest-offer')} className="pair-choice-button"><Paper radius="xl" p="lg" shadow="xs" className="pair-choice-card"><ThemeIcon size={48} radius="xl" color="cyan" variant="light"><IconScan size={23} /></ThemeIcon><Stack gap={3} mt="md"><Text fw={750}>Присоединиться</Text><Text size="sm" c="dimmed">Сканируй QR на другом телефоне.</Text></Stack></Paper></UnstyledButton>
+              <UnstyledButton onClick={() => setPhase('host-settings')} className="pair-choice-button">
+                <Paper radius="xl" p="lg" shadow="xs" className="pair-choice-card">
+                  <ThemeIcon size={48} radius="xl" color="indigo" variant="light"><IconQrcode size={23} /></ThemeIcon>
+                  <Stack gap={3} mt="md"><Text fw={750}>{reconnectMode ? 'Создать соединение' : 'Создать игру'}</Text><Text size="sm" c="dimmed">Покажи один QR или назови код.</Text></Stack>
+                </Paper>
+              </UnstyledButton>
+              <UnstyledButton onClick={() => setPhase('guest-join')} className="pair-choice-button">
+                <Paper radius="xl" p="lg" shadow="xs" className="pair-choice-card">
+                  <ThemeIcon size={48} radius="xl" color="cyan" variant="light"><IconScan size={23} /></ThemeIcon>
+                  <Stack gap={3} mt="md"><Text fw={750}>Присоединиться</Text><Text size="sm" c="dimmed">Сканируй QR или введи 6 символов.</Text></Stack>
+                </Paper>
+              </UnstyledButton>
             </SimpleGrid>
-            <Alert icon={<IconInfoCircle size={18} />} color="gray" radius="lg">Для полностью локальной игры оба телефона должны быть в одной Wi‑Fi сети.</Alert>
+
+            <Alert icon={<IconInfoCircle size={18} />} color="gray" radius="lg">Для поиска второго телефона нужен интернет. После соединения игровые данные идут напрямую между устройствами.</Alert>
           </>
         )}
 
         {phase === 'host-settings' && (
           <>
-            <Stack gap={5}><Title order={2}>{reconnectMode ? 'Настрой соединение' : 'Настрой игру'}</Title><Text c="dimmed">{reconnectMode ? 'Размер и сложность уже сохранены в текущей партии.' : 'Создатель выбирает размер, сложность и способ соединения.'}</Text></Stack>
+            <Stack gap={5}><Title order={2}>{reconnectMode ? 'Новое соединение' : 'Настрой игру'}</Title><Text c="dimmed">{reconnectMode ? 'Размер и сложность останутся прежними.' : 'Выбери поле и сложность. После этого появится один QR и короткий код.'}</Text></Stack>
             {!reconnectMode && (
               <>
                 <Stack gap={7}>
                   <Text fw={700}>Размер поля</Text>
                   <SimpleGrid cols={4} spacing="xs">{boardSizes.map((value) => <Button key={value} variant={size === value ? 'light' : 'default'} color="indigo" radius="md" onClick={() => setSize(value)} aria-pressed={size === value}>{value}×{value}</Button>)}</SimpleGrid>
-                  <Text size="xs" c="dimmed">Блоки {region.rows}×{region.cols}. В полях больше 9×9 после цифры 9 идут буквы.</Text>
+                  <Text size="xs" c="dimmed">Блоки {region.rows}×{region.cols}. После цифры 9 на больших полях используются буквы.</Text>
                 </Stack>
                 <SimpleGrid cols={{ base: 2, xs: 3 }} spacing="sm">{difficulties.map((key) => <UnstyledButton key={key} onClick={() => setDifficulty(key)} className="difficulty-choice"><Paper radius="lg" p="md" shadow="xs" className={difficulty === key ? 'difficulty-card active' : 'difficulty-card'}><Text fw={700}>{difficultyLabels[key]}</Text><Text size="xs" c="dimmed">{difficultyDescription(key)}</Text></Paper></UnstyledButton>)}</SimpleGrid>
               </>
             )}
-            <Paper radius="xl" p="md" shadow="xs"><Stack gap="sm"><Text fw={700}>Соединение</Text><SegmentedControl fullWidth radius="xl" value={networkMode} onChange={(value: string) => setNetworkMode(value as NetworkMode)} data={[{ label: 'Одна Wi‑Fi сеть', value: 'local' }, { label: 'Через интернет', value: 'internet-assisted' }]} /><Group gap="xs" align="flex-start" wrap="nowrap"><ThemeIcon variant="light" color={networkMode === 'local' ? 'indigo' : 'cyan'} size="sm" radius="xl">{networkMode === 'local' ? <IconWifi size={14} /> : <IconWorld size={14} />}</ThemeIcon><Text size="xs" c="dimmed">{networkMode === 'local' ? 'Прямое соединение внутри одной сети.' : 'STUN помогает найти прямой сетевой маршрут. Игровые данные через него не передаются.'}</Text></Group></Stack></Paper>
-            <Button size="lg" radius="xl" leftSection={<IconQrcode size={19} />} onClick={() => void createRoom()} loading={peerState === 'gathering'}>Создать QR</Button>
+            <Button size="lg" radius="xl" leftSection={<IconQrcode size={19} />} onClick={() => void createRoom()} loading={peerState === 'gathering'}>Создать комнату</Button>
           </>
         )}
 
-        {phase === 'host-offer' && <><Stack gap={5}><Title order={2}>Покажи QR другу</Title><Text c="dimmed">На втором телефоне открой «Присоединиться» и наведи камеру на код.</Text></Stack><QrDisplay frames={frames} label="Приглашение в игру" /><CopyButton value={copyCode}>{({ copied, copy }: { copied: boolean; copy: () => void }) => <Button variant="light" radius="xl" leftSection={copied ? <IconCheck size={17} /> : <IconCopy size={17} />} onClick={copy}>{copied ? 'Код скопирован' : 'Скопировать код'}</Button>}</CopyButton><Button size="lg" radius="xl" leftSection={<IconScan size={19} />} onClick={() => setPhase('host-answer')}>Сканировать ответ</Button></>}
-        {phase === 'host-answer' && <><Stack gap={5}><Title order={2}>Отсканируй ответ</Title><Text c="dimmed">Второй телефон покажет свой QR. Наведи на него камеру.</Text></Stack><QrScanner expectedKind="answer" onSignal={(signal) => void acceptAnswer(signal)} /></>}
-        {phase === 'guest-offer' && <><Stack gap={5}><Title order={2}>Сканируй приглашение</Title><Text c="dimmed">Наведи камеру на QR на первом телефоне.</Text></Stack><QrScanner expectedKind="offer" onSignal={(signal) => void acceptOffer(signal)} /></>}
-        {phase === 'guest-answer' && <><Stack gap={5}><Title order={2}>Покажи ответ создателю</Title><Text c="dimmed">Пусть первый телефон отсканирует этот код.</Text></Stack><QrDisplay frames={frames} label="Ответ на приглашение" /><CopyButton value={copyCode}>{({ copied, copy }: { copied: boolean; copy: () => void }) => <Button variant="light" radius="xl" leftSection={copied ? <IconCheck size={17} /> : <IconCopy size={17} />} onClick={copy}>{copied ? 'Код скопирован' : 'Скопировать код'}</Button>}</CopyButton></>}
-        {phase === 'connecting' && <Stack align="center" py="xl" gap="sm"><div className="pulse-orb" /><Title order={2}>Соединяю телефоны</Title><Text c="dimmed" ta="center">QR больше не нужен. Ждём прямое соединение между устройствами.</Text></Stack>}
+        {phase === 'host-room' && (
+          <>
+            <Stack gap={5}><Title order={2}>Покажи этот QR</Title><Text c="dimmed">Второму телефону больше ничего показывать в ответ не нужно.</Text></Stack>
+            <QrDisplay frames={[roomCodeToQr(roomCode)]} label="Код комнаты" />
+            <Paper radius="xl" p="lg" withBorder className="room-code-card">
+              <Stack align="center" gap="xs">
+                <Text size="sm" c="dimmed">Если QR не сканируется</Text>
+                <Text className="room-code-text" fw={800}>{formatRoomCode(roomCode)}</Text>
+                <CopyButton value={roomCode}>{({ copied, copy }: { copied: boolean; copy: () => void }) => <Button variant="subtle" radius="xl" leftSection={copied ? <IconCheck size={17} /> : <IconCopy size={17} />} onClick={copy}>{copied ? 'Скопировано' : 'Скопировать код'}</Button>}</CopyButton>
+              </Stack>
+            </Paper>
+            <Group justify="center" gap="xs"><IconWorld size={17} /><Text size="sm" c="dimmed">Жду второй телефон…</Text></Group>
+          </>
+        )}
+
+        {phase === 'guest-join' && (
+          <>
+            <Stack gap={5}><Title order={2}>Подключиться</Title><Text c="dimmed">Наведи камеру на один QR. Если камера не поймает его — введи короткий код под QR.</Text></Stack>
+            <QrScanner onCode={(code) => void joinRoom(code)} />
+          </>
+        )}
+
+        {phase === 'connecting' && (
+          <Stack align="center" py="xl" gap="sm">
+            <div className="pulse-orb" />
+            <Title order={2}>Подключаю</Title>
+            <Text c="dimmed" ta="center">Комната {formatRoomCode(roomCode)}. Обычно это занимает несколько секунд.</Text>
+          </Stack>
+        )}
+
         {error && <Alert icon={<IconAlertCircle size={18} />} color="red" radius="lg">{error}</Alert>}
       </Stack>
     </Container>
@@ -215,7 +253,16 @@ export function PairingScreen({ initialName, initialColor, deviceId, reconnectMo
 }
 
 function stateLabel(state: PeerState) {
-  const labels: Record<PeerState, string> = { idle: 'Готово', gathering: 'Создаю QR', waiting: 'Жду второй телефон', connecting: 'Соединяю', connected: 'Соединено', disconnected: 'Связь прервалась', failed: 'Ошибка соединения', closed: 'Соединение закрыто' };
+  const labels: Record<PeerState, string> = {
+    idle: 'Готово',
+    gathering: 'Готовлю соединение',
+    waiting: 'Жду второй телефон',
+    connecting: 'Подключаю',
+    connected: 'Соединено',
+    disconnected: 'Связь прервалась',
+    failed: 'Ошибка соединения',
+    closed: 'Соединение закрыто',
+  };
   return labels[state];
 }
 
@@ -224,6 +271,6 @@ function difficultyDescription(value: Difficulty) {
   if (value === 'medium') return 'Спокойная партия';
   if (value === 'hard') return 'Нужно больше заметок';
   if (value === 'expert') return 'Мало очевидных ходов';
-  if (value === 'legendary') return 'Длинные цепочки решений';
-  return 'Максимум логики и терпения';
+  if (value === 'legendary') return 'Для опытных игроков';
+  return 'Самый плотный режим';
 }
