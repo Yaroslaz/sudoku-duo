@@ -26,6 +26,7 @@ function offlineServiceWorker(): Plugin {
 const APP_VERSION = '${APP_VERSION}';
 const CACHE = 'sudoku-duo-v${APP_VERSION}-${buildId}';
 const PRECACHE = ${JSON.stringify(precache)};
+const FORCE_REFRESH_LEGACY_CLIENTS = APP_VERSION === '1.2.0';
 
 self.addEventListener('install', (event) => {
   event.waitUntil((async () => {
@@ -43,6 +44,18 @@ self.addEventListener('activate', (event) => {
     const keys = await caches.keys();
     await Promise.all(keys.filter((key) => key.startsWith('sudoku-duo-') && key !== CACHE).map((key) => caches.delete(key)));
     await self.clients.claim();
+
+    if (FORCE_REFRESH_LEGACY_CLIENTS) {
+      const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+      await Promise.all(clients.map(async (client) => {
+        if (!('navigate' in client)) return;
+        try {
+          await client.navigate(client.url);
+        } catch {
+          // A closed/background client can disappear while the worker activates.
+        }
+      }));
+    }
   })());
 });
 
