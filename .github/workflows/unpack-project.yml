@@ -38,7 +38,7 @@ jobs:
           shopt -s dotglob nullglob
           cp -a unpack/sudoku-duo/. .
           rm -rf bundle project.zip.b64 project.full.b64 project.zip unpack
-          rm -f .github/workflows/unpack-project.yml
+          rm -f .github/workflows/deploy-pages.yml
 
       - name: Commit restored project
         shell: bash
@@ -53,5 +53,3 @@ jobs:
           fi
           git commit -m "Add Sudoku Duo app"
           git push
-
-# The second commit ensures the workflow is already present before the push event.
