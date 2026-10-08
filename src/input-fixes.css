@@ -1,0 +1,38 @@
+/* Input-state fixes loaded after the main game styles. */
+.reference-game .number-button {
+  border-radius: 999px !important;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.reference-game .number-glyph {
+  border-radius: 50%;
+  overflow: hidden;
+  isolation: isolate;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+.reference-game .number-button:not(:disabled):active .number-glyph,
+.reference-game .number-button.locked .number-glyph {
+  border-radius: 50%;
+}
+
+.reference-game .number-button:focus,
+.reference-game .number-button:active {
+  border-radius: 999px !important;
+}
+
+/* A wrong answer must stay visibly wrong even while the cell is still selected. */
+.reference-game .sudoku-cell.selected-local.wrong,
+.reference-game .sudoku-cell.wrong.selected-local {
+  background: #ffe3e8 !important;
+  color: #c92f46 !important;
+  box-shadow: inset 0 0 0 2px rgba(201, 47, 70, .72);
+  z-index: 5;
+}
+
+.reference-game .sudoku-cell.selected-local.wrong .cell-value,
+.reference-game .sudoku-cell.wrong.selected-local .cell-value {
+  color: #c92f46 !important;
+}

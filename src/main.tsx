@@ -4,6 +4,7 @@ import './interaction.css';
 import './pairing-polish.css';
 import './home-polish.css';
 import './learning-polish.css';
+import './input-fixes.css';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
