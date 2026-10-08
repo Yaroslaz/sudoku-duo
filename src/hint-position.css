@@ -1,0 +1,45 @@
+/* Hint card never sits on top of the cell it is explaining.
+   Upper-half targets dock the card over controls; lower-half targets dock it over stats. */
+.floating-hint {
+  top: auto;
+  bottom: max(calc(var(--safe-bottom) + 10px), 12px);
+  max-height: min(210px, 28dvh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* 4×4: rows 3–4 (zero based 2–3) are the lower half. */
+.reference-game:has(.sudoku-board.size-4 .hint-target[data-row='2']) .floating-hint,
+.reference-game:has(.sudoku-board.size-4 .hint-target[data-row='3']) .floating-hint,
+/* 5×5: rows 4–5 are safely in the lower half. */
+.reference-game:has(.sudoku-board.size-5 .hint-target[data-row='3']) .floating-hint,
+.reference-game:has(.sudoku-board.size-5 .hint-target[data-row='4']) .floating-hint,
+/* 6×6: rows 4–6. */
+.reference-game:has(.sudoku-board.size-6 .hint-target[data-row='3']) .floating-hint,
+.reference-game:has(.sudoku-board.size-6 .hint-target[data-row='4']) .floating-hint,
+.reference-game:has(.sudoku-board.size-6 .hint-target[data-row='5']) .floating-hint,
+/* 9×9: rows 6–9. The centre row stays with the bottom dock. */
+.reference-game:has(.sudoku-board.size-9 .hint-target[data-row='5']) .floating-hint,
+.reference-game:has(.sudoku-board.size-9 .hint-target[data-row='6']) .floating-hint,
+.reference-game:has(.sudoku-board.size-9 .hint-target[data-row='7']) .floating-hint,
+.reference-game:has(.sudoku-board.size-9 .hint-target[data-row='8']) .floating-hint {
+  top: max(calc(var(--safe-top) + 56px), 62px);
+  bottom: auto;
+}
+
+/* Keep the card compact: the board should remain the visual focus. */
+.floating-hint-body {
+  min-height: 48px;
+  padding-top: 4px;
+  padding-bottom: 2px;
+}
+
+@media (max-height: 700px) {
+  .floating-hint {
+    max-height: 180px;
+  }
+
+  .floating-hint-body {
+    min-height: 40px;
+  }
+}
