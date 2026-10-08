@@ -105,6 +105,7 @@ export function NumberPad({ size, notesMode, eraserMode, hintActive, disabled, r
       heldDigit.current = null;
       return;
     }
+    if (lockedDigit === digit) return;
     onDigit(digit);
   };
 
@@ -153,7 +154,7 @@ export function NumberPad({ size, notesMode, eraserMode, hintActive, disabled, r
               className={`number-button pressable-control ${locked ? 'locked' : ''} ${notesMode ? 'note-number' : ''}`}
               disabled={disabled}
               aria-pressed={locked}
-              aria-label={locked ? `${symbol} закреплён. Удерживай, чтобы снять закрепление` : `Ввести ${symbol}. Удерживай, чтобы закрепить`}
+              aria-label={locked ? `${symbol} закреплён. Нажимай клетки поля для ввода` : `Ввести ${symbol}. Удерживай, чтобы закрепить`}
               onPointerDown={(event) => startHold(digit, event.clientX, event.clientY)}
               onPointerMove={(event) => cancelIfMoved(event.clientX, event.clientY)}
               onPointerUp={clearHold}

@@ -26,7 +26,7 @@ for (const difficulty of difficulties) {
   assert(countSolutions(generated.puzzle, 2) === 1, `${difficulty}: puzzle must have one solution`);
 }
 
-const game = createGame('easy', ['a', 'b'], 12, 'session-test', 1_000);
+const game = createGame('easy', ['a', 'b'], 12, null, 'session-test', 1_000);
 let emptyRow = -1;
 let emptyCol = -1;
 for (let r = 0; r < game.size && emptyRow < 0; r += 1) {
@@ -45,9 +45,13 @@ const wrongMove = applyGameAction(noted.snapshot, { type: 'set', playerId: 'a', 
 assert(wrongMove.accepted && wrongMove.correct === false, 'wrong move must be accepted and marked wrong');
 assert(wrongMove.snapshot.scores.a.mistakes === 1, 'wrong move must count as a mistake');
 
-const correctMove = applyGameAction(wrongMove.snapshot, { type: 'set', playerId: 'a', row: emptyRow, col: emptyCol, digit: correct }, 1_600);
+const clearedWrong = applyGameAction(wrongMove.snapshot, { type: 'clear', playerId: 'a', row: emptyRow, col: emptyCol }, 1_500);
+const repeatedWrong = applyGameAction(clearedWrong.snapshot, { type: 'set', playerId: 'a', row: emptyRow, col: emptyCol, digit: wrong }, 1_550);
+assert(repeatedWrong.snapshot.scores.a.mistakes === 1, 'same wrong digit in same cell must not be counted twice');
+
+const correctMove = applyGameAction(repeatedWrong.snapshot, { type: 'set', playerId: 'a', row: emptyRow, col: emptyCol, digit: correct }, 1_600);
 assert(correctMove.correct === true, 'correct replacement must be accepted');
-assert(correctMove.snapshot.scores.a.correct === 1, 'correct move must affect score');
+assert(correctMove.snapshot.scores.a.correct === 1, 'correct move must affect score once');
 
 const paused = applyGameAction(correctMove.snapshot, { type: 'pause', playerId: 'b', at: 2_000 }, 2_000);
 assert(paused.snapshot.pausedAt === 2_000, 'pause must be shared in snapshot');
@@ -61,4 +65,4 @@ assert(possible.includes(correct), 'solution symbol must be a candidate in untou
 const hint = findHint(game.board);
 if (hint) assert(game.board[hint.cell.row][hint.cell.col] === 0, 'hint must point to an empty cell');
 
-console.log('Core checks passed for 9x9, 12x12, 15x15, 18x18 and six difficulty levels.');
+console.log('Core checks passed for 9x9, 12x12, 15x15, 18x18, anti-farming and six difficulty levels.');

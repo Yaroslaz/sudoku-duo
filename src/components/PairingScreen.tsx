@@ -28,7 +28,7 @@ import {
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { boardSizes, difficulties, difficultyLabels, regionDimensions } from '../game/engine';
 import { playerColors } from '../game/playerColors';
-import type { BoardSize, Difficulty, Player, PlayerColor } from '../game/types';
+import type { BoardSize, Difficulty, MistakeLimit, Player, PlayerColor } from '../game/types';
 import { PeerSession, type PeerRole, type PeerState } from '../multiplayer/peer';
 import { signalToCopyCode, signalToFrames, type SignalPayload } from '../multiplayer/signaling';
 import { QrDisplay } from './QrDisplay';
@@ -43,6 +43,7 @@ export type PairingResult = {
   remotePlayer: Player;
   difficulty: Difficulty | null;
   size: BoardSize | null;
+  mistakeLimit: MistakeLimit;
 };
 
 export function PairingScreen({ initialName, initialColor, deviceId, reconnectMode = false, onBack, onNameChange, onColorChange, onConnected }: {
@@ -60,6 +61,7 @@ export function PairingScreen({ initialName, initialColor, deviceId, reconnectMo
   const [color, setColor] = useState<PlayerColor>(initialColor);
   const [difficulty, setDifficulty] = useState<Difficulty>('medium');
   const [size, setSize] = useState<BoardSize>(9);
+  const [mistakeLimit, setMistakeLimit] = useState<MistakeLimit>(null);
   const [frames, setFrames] = useState<string[]>([]);
   const [peerState, setPeerState] = useState<PeerState>('idle');
   const [error, setError] = useState('');
@@ -69,6 +71,12 @@ export function PairingScreen({ initialName, initialColor, deviceId, reconnectMo
   const sessionRef = useRef<PeerSession | null>(null);
   const handedOff = useRef(false);
   const difficultyData = difficulties.map((value) => ({ value, label: difficultyLabels[value] }));
+  const mistakeLimitData = [
+    { value: 'none', label: 'Без лимита' },
+    { value: '3', label: '3 ошибки' },
+    { value: '5', label: '5 ошибок' },
+    { value: '10', label: '10 ошибок' },
+  ];
 
   const changeColor = (next: PlayerColor) => {
     setColor(next);
@@ -97,8 +105,9 @@ export function PairingScreen({ initialName, initialColor, deviceId, reconnectMo
       remotePlayer: remote,
       difficulty: role === 'host' && !reconnectMode ? difficulty : null,
       size: role === 'host' && !reconnectMode ? size : null,
+      mistakeLimit: role === 'host' && !reconnectMode ? mistakeLimit : null,
     });
-  }, [difficulty, localPlayer, onConnected, peerState, reconnectMode, remote, role, size]);
+  }, [difficulty, localPlayer, mistakeLimit, onConnected, peerState, reconnectMode, remote, role, size]);
 
   useEffect(() => () => {
     if (!handedOff.current) sessionRef.current?.close();
@@ -205,7 +214,7 @@ export function PairingScreen({ initialName, initialColor, deviceId, reconnectMo
 
         {phase === 'host-settings' && (
           <>
-            <Stack gap={5}><Title order={2}>{reconnectMode ? 'Новое соединение' : 'Настрой игру'}</Title><Text c="dimmed">{reconnectMode ? 'Размер и сложность уже сохранены в партии.' : 'Выбери поле и сложность.'}</Text></Stack>
+            <Stack gap={5}><Title order={2}>{reconnectMode ? 'Новое соединение' : 'Настрой игру'}</Title><Text c="dimmed">{reconnectMode ? 'Размер, сложность и предел ошибок уже сохранены в партии.' : 'Выбери поле, сложность и предел ошибок.'}</Text></Stack>
             {!reconnectMode && (
               <>
                 <Stack gap="sm">
@@ -230,16 +239,22 @@ export function PairingScreen({ initialName, initialColor, deviceId, reconnectMo
 
                 <Stack gap="sm">
                   <Text fw={700}>Сложность</Text>
+                  <Select data={difficultyData} value={difficulty} onChange={(value) => value && setDifficulty(value as Difficulty)} allowDeselect={false} size="md" radius="lg" className="difficulty-select" />
+                  <Text size="xs" c="dimmed">{difficultyDescription(difficulty)}</Text>
+                </Stack>
+
+                <Stack gap="sm">
+                  <Text fw={700}>Предел ошибок</Text>
                   <Select
-                    data={difficultyData}
-                    value={difficulty}
-                    onChange={(value) => value && setDifficulty(value as Difficulty)}
+                    data={mistakeLimitData}
+                    value={mistakeLimit === null ? 'none' : String(mistakeLimit)}
+                    onChange={(value) => setMistakeLimit(value === '3' ? 3 : value === '5' ? 5 : value === '10' ? 10 : null)}
                     allowDeselect={false}
                     size="md"
                     radius="lg"
                     className="difficulty-select"
                   />
-                  <Text size="xs" c="dimmed">{difficultyDescription(difficulty)}</Text>
+                  <Text size="xs" c="dimmed">{mistakeLimit === null ? 'Ошибки считаются, но не завершают партию.' : `Лимит общий для команды. ${mistakeLimit}-я ошибка завершит игру.`}</Text>
                 </Stack>
               </>
             )}

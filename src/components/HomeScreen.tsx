@@ -23,7 +23,7 @@ import {
 } from '@tabler/icons-react';
 import { useState, type CSSProperties } from 'react';
 import { boardSizes, difficulties, difficultyLabels, regionDimensions } from '../game/engine';
-import type { BoardSize, Difficulty, GameSnapshot } from '../game/types';
+import type { BoardSize, Difficulty, GameSnapshot, MistakeLimit } from '../game/types';
 
 export function HomeScreen({
   savedGame,
@@ -33,7 +33,7 @@ export function HomeScreen({
   onRules,
 }: {
   savedGame: GameSnapshot | null;
-  onSolo: (difficulty: Difficulty, size: BoardSize) => void;
+  onSolo: (difficulty: Difficulty, size: BoardSize, mistakeLimit: MistakeLimit) => void;
   onMultiplayer: () => void;
   onContinue: () => void;
   onRules: () => void;
@@ -41,6 +41,7 @@ export function HomeScreen({
   const [view, setView] = useState<'home' | 'solo'>('home');
   const [size, setSize] = useState<BoardSize>(9);
   const [difficulty, setDifficulty] = useState<Difficulty>('medium');
+  const [mistakeLimit, setMistakeLimit] = useState<MistakeLimit>(null);
 
   return (
     <Container size="sm" className="home-screen">
@@ -56,10 +57,12 @@ export function HomeScreen({
         <SoloSetup
           size={size}
           difficulty={difficulty}
+          mistakeLimit={mistakeLimit}
           onSizeChange={setSize}
           onDifficultyChange={setDifficulty}
+          onMistakeLimitChange={setMistakeLimit}
           onBack={() => setView('home')}
-          onStart={() => onSolo(difficulty, size)}
+          onStart={() => onSolo(difficulty, size, mistakeLimit)}
         />
       )}
     </Container>
@@ -94,7 +97,7 @@ function HomeLanding({
         <Button variant="subtle" color="gray" radius="xl" leftSection={<IconBook2 size={17} />} onClick={onRules}>Правила</Button>
       </Group>
 
-      {savedGame && !savedGame.completedAt && (
+      {savedGame && !savedGame.completedAt && !savedGame.failedAt && (
         <UnstyledButton onClick={onContinue} className="continue-button">
           <Paper radius="xl" p="md" shadow="xs" className="continue-card">
             <Group justify="space-between" wrap="nowrap">
@@ -172,15 +175,19 @@ function ModeCard({
 function SoloSetup({
   size,
   difficulty,
+  mistakeLimit,
   onSizeChange,
   onDifficultyChange,
+  onMistakeLimitChange,
   onBack,
   onStart,
 }: {
   size: BoardSize;
   difficulty: Difficulty;
+  mistakeLimit: MistakeLimit;
   onSizeChange: (value: BoardSize) => void;
   onDifficultyChange: (value: Difficulty) => void;
+  onMistakeLimitChange: (value: MistakeLimit) => void;
   onBack: () => void;
   onStart: () => void;
 }) {
@@ -194,7 +201,7 @@ function SoloSetup({
 
       <Stack gap={4}>
         <Text component="h1" fw={800} className="setup-title">Настрой игру</Text>
-        <Text c="dimmed">Выбери размер поля и сложность.</Text>
+        <Text c="dimmed">Выбери размер поля, сложность и лимит ошибок.</Text>
       </Stack>
 
       <Paper radius="xl" p="lg" shadow="xs" className="solo-setup-card">
@@ -206,6 +213,7 @@ function SoloSetup({
           </Stack>
 
           <DifficultyMenu value={difficulty} onChange={onDifficultyChange} />
+          <MistakeLimitMenu value={mistakeLimit} onChange={onMistakeLimitChange} />
 
           <Button size="lg" radius="xl" color="indigo" rightSection={<IconArrowRight size={18} />} onClick={onStart}>Начать игру</Button>
         </Stack>
@@ -240,14 +248,7 @@ function DifficultyMenu({ value, onChange }: { value: Difficulty; onChange: (val
   return (
     <Stack gap="sm">
       <Text fw={700}>Сложность</Text>
-      <Menu
-        position="bottom-start"
-        width="target"
-        offset={8}
-        withinPortal
-        trapFocus={false}
-        transitionProps={{ transition: 'pop-top-left', duration: 170 }}
-      >
+      <Menu position="bottom-start" width="target" offset={8} withinPortal trapFocus={false} transitionProps={{ transition: 'pop-top-left', duration: 170 }}>
         <Menu.Target>
           <UnstyledButton className="difficulty-menu-target" aria-label="Выбрать сложность">
             <span>{difficultyLabels[value]}</span>
@@ -256,12 +257,7 @@ function DifficultyMenu({ value, onChange }: { value: Difficulty; onChange: (val
         </Menu.Target>
         <Menu.Dropdown className="difficulty-menu-dropdown">
           {difficulties.map((item) => (
-            <Menu.Item
-              key={item}
-              onClick={() => onChange(item)}
-              rightSection={item === value ? <IconCheck size={17} /> : null}
-              className={item === value ? 'difficulty-menu-item active' : 'difficulty-menu-item'}
-            >
+            <Menu.Item key={item} onClick={() => onChange(item)} rightSection={item === value ? <IconCheck size={17} /> : null} className={item === value ? 'difficulty-menu-item active' : 'difficulty-menu-item'}>
               {difficultyLabels[item]}
             </Menu.Item>
           ))}
@@ -272,17 +268,48 @@ function DifficultyMenu({ value, onChange }: { value: Difficulty; onChange: (val
   );
 }
 
+function MistakeLimitMenu({ value, onChange }: { value: MistakeLimit; onChange: (value: MistakeLimit) => void }) {
+  const options: { value: MistakeLimit; label: string }[] = [
+    { value: null, label: 'Без лимита' },
+    { value: 3, label: '3 ошибки' },
+    { value: 5, label: '5 ошибок' },
+    { value: 10, label: '10 ошибок' },
+  ];
+  return (
+    <Stack gap="sm">
+      <Text fw={700}>Предел ошибок</Text>
+      <Menu position="bottom-start" width="target" offset={8} withinPortal trapFocus={false} transitionProps={{ transition: 'pop-top-left', duration: 170 }}>
+        <Menu.Target>
+          <UnstyledButton className="difficulty-menu-target" aria-label="Выбрать предел ошибок">
+            <span>{mistakeLimitLabel(value)}</span>
+            <IconChevronDown size={20} />
+          </UnstyledButton>
+        </Menu.Target>
+        <Menu.Dropdown className="difficulty-menu-dropdown">
+          {options.map((item) => (
+            <Menu.Item key={item.label} onClick={() => onChange(item.value)} rightSection={item.value === value ? <IconCheck size={17} /> : null} className={item.value === value ? 'difficulty-menu-item active' : 'difficulty-menu-item'}>
+              {item.label}
+            </Menu.Item>
+          ))}
+        </Menu.Dropdown>
+      </Menu>
+      <Text size="xs" c="dimmed">{value === null ? 'Ошибки считаются, но не завершают партию.' : `После ${value}-й ошибки партия завершится.`}</Text>
+    </Stack>
+  );
+}
+
+function mistakeLimitLabel(value: MistakeLimit) {
+  if (value === null) return 'Без лимита';
+  return `${value} ${value === 3 ? 'ошибки' : 'ошибок'}`;
+}
+
 function BoardSizeIllustration({ size }: { size: BoardSize }) {
   const region = regionDimensions(size);
   const blockRows = size / region.rows;
   const blockCols = size / region.cols;
   const count = blockRows * blockCols;
   return (
-    <div
-      className="board-mode-art"
-      style={{ '--block-rows': blockRows, '--block-cols': blockCols } as CSSProperties}
-      aria-hidden="true"
-    >
+    <div className="board-mode-art" style={{ '--block-rows': blockRows, '--block-cols': blockCols } as CSSProperties} aria-hidden="true">
       {Array.from({ length: count }, (_, index) => <span key={index} />)}
     </div>
   );

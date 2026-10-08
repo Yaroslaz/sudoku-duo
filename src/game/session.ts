@@ -1,6 +1,6 @@
 import { boardMatchesSolution, cloneBoard, cloneNotes, emptyNotes, generatePuzzle, removePeerNotes } from './engine';
 import { initialScore, scoreCorrect, scoreHint, scoreMistake } from './scoring';
-import type { Board, BoardSize, Coordinate, Difficulty, Digit, GameSnapshot, PlayerScore } from './types';
+import type { Board, BoardSize, Coordinate, Difficulty, Digit, GameSnapshot, MistakeLimit, PlayerScore } from './types';
 
 export type GameAction =
   | { type: 'set'; playerId: string; row: number; col: number; digit: Digit }
@@ -15,9 +15,17 @@ export type ActionResult = {
   accepted: boolean;
   correct?: boolean;
   completed?: boolean;
+  failed?: boolean;
 };
 
-export function createGame(difficulty: Difficulty, playerIds: string[], size: BoardSize = 9, seed?: string, now = Date.now()): GameSnapshot {
+export function createGame(
+  difficulty: Difficulty,
+  playerIds: string[],
+  size: BoardSize = 9,
+  mistakeLimit: MistakeLimit = null,
+  seed?: string,
+  now = Date.now(),
+): GameSnapshot {
   const generated = generatePuzzle(difficulty, size, seed);
   const scores: Record<string, PlayerScore> = {};
   for (const id of playerIds) scores[id] = initialScore();
@@ -26,14 +34,18 @@ export function createGame(difficulty: Difficulty, playerIds: string[], size: Bo
     id: generated.seed,
     size,
     difficulty,
+    mistakeLimit,
     puzzle: generated.puzzle,
     solution: generated.solution,
     board: cloneBoard(generated.puzzle),
     notes: emptyNotes(size),
+    attemptedDigits: emptyNotes(size),
     startedAt: now,
     pausedAt: null,
     totalPausedMs: 0,
     completedAt: null,
+    failedAt: null,
+    failedBy: null,
     scores,
     lastSeq: 0,
   };
@@ -44,7 +56,11 @@ function ensureScore(snapshot: GameSnapshot, playerId: string): PlayerScore {
 }
 
 function editable(snapshot: GameSnapshot, row: number, col: number) {
-  return snapshot.puzzle[row]?.[col] === 0 && snapshot.completedAt === null;
+  return snapshot.puzzle[row]?.[col] === 0 && snapshot.completedAt === null && snapshot.failedAt === null;
+}
+
+function totalMistakes(snapshot: GameSnapshot) {
+  return Object.values(snapshot.scores).reduce((total, score) => total + score.mistakes, 0);
 }
 
 export function applyGameAction(snapshot: GameSnapshot, action: GameAction, now = Date.now()): ActionResult {
@@ -52,24 +68,26 @@ export function applyGameAction(snapshot: GameSnapshot, action: GameAction, now 
     ...snapshot,
     board: cloneBoard(snapshot.board),
     notes: cloneNotes(snapshot.notes),
+    attemptedDigits: cloneNotes(snapshot.attemptedDigits ?? emptyNotes(snapshot.size)),
     scores: { ...snapshot.scores },
     lastSeq: snapshot.lastSeq + 1,
   };
 
   if (action.type === 'pause') {
-    if (next.pausedAt !== null || next.completedAt !== null) return { snapshot, accepted: false };
+    if (next.pausedAt !== null || next.completedAt !== null || next.failedAt !== null) return { snapshot, accepted: false };
     next.pausedAt = action.at;
     return { snapshot: next, accepted: true };
   }
 
   if (action.type === 'resume') {
-    if (next.pausedAt === null || next.completedAt !== null) return { snapshot, accepted: false };
+    if (next.pausedAt === null || next.completedAt !== null || next.failedAt !== null) return { snapshot, accepted: false };
     next.totalPausedMs += Math.max(0, action.at - next.pausedAt);
     next.pausedAt = null;
     return { snapshot: next, accepted: true };
   }
 
   if (action.type === 'hint') {
+    if (next.pausedAt !== null || next.completedAt !== null || next.failedAt !== null) return { snapshot, accepted: false };
     next.scores[action.playerId] = scoreHint(ensureScore(next, action.playerId));
     return { snapshot: next, accepted: true };
   }
@@ -92,14 +110,28 @@ export function applyGameAction(snapshot: GameSnapshot, action: GameAction, now 
   }
 
   if (action.digit < 1 || action.digit > next.size) return { snapshot, accepted: false };
+
   const correct = next.solution[action.row][action.col] === action.digit;
+  const attempts = next.attemptedDigits[action.row][action.col];
+  const firstScoredAttempt = !attempts.includes(action.digit);
+
   next.board[action.row][action.col] = action.digit;
   next.notes[action.row][action.col] = [];
-  next.scores[action.playerId] = correct
-    ? scoreCorrect(ensureScore(next, action.playerId))
-    : scoreMistake(ensureScore(next, action.playerId));
+
+  if (firstScoredAttempt) {
+    next.attemptedDigits[action.row][action.col] = [...attempts, action.digit].sort((a, b) => a - b);
+    next.scores[action.playerId] = correct
+      ? scoreCorrect(ensureScore(next, action.playerId))
+      : scoreMistake(ensureScore(next, action.playerId));
+  }
 
   if (correct) next.notes = removePeerNotes(next.notes, action.row, action.col, action.digit);
+
+  if (!correct && firstScoredAttempt && next.mistakeLimit !== null && totalMistakes(next) >= next.mistakeLimit) {
+    next.failedAt = now;
+    next.failedBy = action.playerId;
+    return { snapshot: next, accepted: true, correct, failed: true };
+  }
 
   const completed = boardMatchesSolution(next.board, next.solution);
   if (completed) next.completedAt = now;
@@ -107,7 +139,7 @@ export function applyGameAction(snapshot: GameSnapshot, action: GameAction, now 
 }
 
 export function elapsedMs(snapshot: GameSnapshot, now = Date.now()) {
-  const end = snapshot.completedAt ?? snapshot.pausedAt ?? now;
+  const end = snapshot.completedAt ?? snapshot.failedAt ?? snapshot.pausedAt ?? now;
   return Math.max(0, end - snapshot.startedAt - snapshot.totalPausedMs);
 }
 
@@ -125,6 +157,19 @@ export function sanitizeSnapshot(value: unknown): GameSnapshot | null {
   const size = candidate.size ?? 9;
   const allowedSize = size === 9 || size === 12 || size === 15 || size === 18;
   const isBoard = (board: Board | undefined) => allowedSize && Array.isArray(board) && board.length === size && board.every((row) => Array.isArray(row) && row.length === size);
+  const isNotesGrid = (grid: unknown): grid is GameSnapshot['attemptedDigits'] => Array.isArray(grid) && grid.length === size && grid.every((row) => Array.isArray(row) && row.length === size && row.every((cell) => Array.isArray(cell)));
   if (candidate.version !== 1 || typeof candidate.id !== 'string' || !isBoard(candidate.puzzle) || !isBoard(candidate.solution) || !isBoard(candidate.board)) return null;
-  return { ...candidate, size } as GameSnapshot;
+
+  const mistakeLimit: MistakeLimit = candidate.mistakeLimit === 3 || candidate.mistakeLimit === 5 || candidate.mistakeLimit === 10
+    ? candidate.mistakeLimit
+    : null;
+
+  return {
+    ...candidate,
+    size,
+    mistakeLimit,
+    attemptedDigits: isNotesGrid(candidate.attemptedDigits) ? candidate.attemptedDigits : emptyNotes(size),
+    failedAt: typeof candidate.failedAt === 'number' ? candidate.failedAt : null,
+    failedBy: typeof candidate.failedBy === 'string' ? candidate.failedBy : null,
+  } as GameSnapshot;
 }

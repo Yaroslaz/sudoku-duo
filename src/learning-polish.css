@@ -3,6 +3,12 @@
   color: #185d9f !important;
 }
 
+.reference-game .sudoku-cell.selected-local.wrong {
+  background: #fff0f2 !important;
+  color: #cf4458 !important;
+  box-shadow: inset 0 0 0 2px rgba(207, 68, 88, .2);
+}
+
 .reference-game .sudoku-cell.hint-related {
   background: #fffaf0;
 }

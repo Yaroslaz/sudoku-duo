@@ -68,7 +68,7 @@ export function GameScreen({
   const [hintStep, setHintStep] = useState(0);
   const [rulesOpen, setRulesOpen] = useState(false);
   const [leaveOpen, setLeaveOpen] = useState(false);
-  const now = useNow(Boolean(snapshot && !snapshot.completedAt && !snapshot.pausedAt));
+  const now = useNow(Boolean(snapshot && !snapshot.completedAt && !snapshot.failedAt && !snapshot.pausedAt));
 
   const remaining = useMemo(() => {
     const result: Record<number, number> = {};
@@ -95,19 +95,27 @@ export function GameScreen({
   }
 
   const paused = snapshot.pausedAt !== null;
+  const failed = snapshot.failedAt !== null;
+  const gameOver = Boolean(snapshot.completedAt || snapshot.failedAt);
   const connectionLost = peerState === 'disconnected' || peerState === 'failed';
   const localScore = snapshot.scores[localPlayer.id];
   const remotePlayer = players.find((player) => player.id !== localPlayer.id) ?? null;
   const remoteScore = remotePlayer ? snapshot.scores[remotePlayer.id] : null;
+  const totalMistakes = Object.values(snapshot.scores).reduce((sum, score) => sum + score.mistakes, 0);
+  const mistakeText = snapshot.mistakeLimit === null
+    ? scoreFormatter.format(totalMistakes)
+    : `${scoreFormatter.format(totalMistakes)} / ${snapshot.mistakeLimit}`;
+  const failedPlayer = snapshot.failedBy ? players.find((player) => player.id === snapshot.failedBy) ?? null : null;
 
   const select = (row: number, col: number) => {
-    if (paused) return;
+    if (paused || gameOver) return;
     const cell = { row, col };
     setSelected(cell);
     onCursor(cell, notesMode);
   };
 
   const toggleNotes = () => {
+    if (gameOver) return;
     const next = !notesMode;
     setNotesMode(next);
     setEraserMode(false);
@@ -115,6 +123,7 @@ export function GameScreen({
   };
 
   const toggleEraser = () => {
+    if (gameOver) return;
     const next = !eraserMode;
     setEraserMode(next);
     if (next) {
@@ -125,12 +134,13 @@ export function GameScreen({
   };
 
   const changeLockedDigit = (digit: Digit | null) => {
+    if (gameOver) return;
     setEraserMode(false);
     setLockedDigit(digit);
   };
 
   const digit = (value: Digit) => {
-    if (!selected || paused || snapshot.completedAt || snapshot.puzzle[selected.row][selected.col] !== 0) return;
+    if (!selected || paused || gameOver || snapshot.puzzle[selected.row][selected.col] !== 0) return;
     setEraserMode(false);
     if (notesMode) {
       if (snapshot.board[selected.row][selected.col] !== 0) return;
@@ -145,7 +155,7 @@ export function GameScreen({
   };
 
   const paintCell = (row: number, col: number, mode: PaintMode) => {
-    if (!lockedDigit || paused || snapshot.completedAt || snapshot.puzzle[row][col] !== 0) return;
+    if (!lockedDigit || paused || gameOver || snapshot.puzzle[row][col] !== 0) return;
     setSelected({ row, col });
     onCursor({ row, col }, notesMode);
     if (notesMode) {
@@ -165,7 +175,7 @@ export function GameScreen({
   };
 
   const eraseCell = (row: number, col: number) => {
-    if (paused || snapshot.completedAt || snapshot.puzzle[row][col] !== 0) return;
+    if (paused || gameOver || snapshot.puzzle[row][col] !== 0) return;
     setSelected({ row, col });
     onCursor({ row, col }, false);
     if (snapshot.board[row][col] === 0 && snapshot.notes[row][col].length === 0) return;
@@ -178,6 +188,7 @@ export function GameScreen({
   };
 
   const askHint = () => {
+    if (gameOver) return;
     setEraserMode(false);
     const found = findHint(snapshot.board);
     setHint(found);
@@ -197,7 +208,7 @@ export function GameScreen({
   };
 
   const applyHint = () => {
-    if (!hint) return;
+    if (!hint || gameOver) return;
     setSelected(hint.cell);
     onCursor(hint.cell, false);
     setNotesMode(false);
@@ -208,6 +219,7 @@ export function GameScreen({
   };
 
   const togglePause = () => {
+    if (gameOver) return;
     onAction(paused
       ? { type: 'resume', playerId: localPlayer.id, at: Date.now() }
       : { type: 'pause', playerId: localPlayer.id, at: Date.now() });
@@ -241,7 +253,7 @@ export function GameScreen({
             aria-label={paused ? 'Продолжить игру' : 'Поставить на паузу'}
             aria-pressed={paused}
             onClick={togglePause}
-            disabled={Boolean(snapshot.completedAt) || connectionLost}
+            disabled={gameOver || connectionLost}
             className="reference-header-action reference-pause pressable-control"
           >
             {paused ? <IconPlayerPlay size={24} stroke={1.8} /> : <IconPlayerPause size={24} stroke={1.8} />}
@@ -252,7 +264,7 @@ export function GameScreen({
       <section className="reference-stats" aria-label="Статистика игры">
         <div className="reference-stat"><Text className="reference-stat-label">Счёт</Text><Text className="reference-stat-value reference-score-value">{scoreText}</Text></div>
         <div className="reference-stat"><Text className="reference-stat-label">Уровень</Text><Text className="reference-stat-value">{difficultyLabels[snapshot.difficulty]} · {snapshot.size}×{snapshot.size}</Text></div>
-        <div className="reference-stat"><Text className="reference-stat-label">Ошибки</Text><Text className="reference-stat-value">{scoreFormatter.format(localScore?.mistakes ?? 0)}</Text></div>
+        <div className="reference-stat"><Text className="reference-stat-label">Ошибки</Text><Text className="reference-stat-value">{mistakeText}</Text></div>
         <div className="reference-stat"><Text className="reference-stat-label">Время</Text><Text className="reference-stat-value timer">{formatDuration(elapsedMs(snapshot, now))}</Text></div>
       </section>
 
@@ -284,7 +296,7 @@ export function GameScreen({
           eraserMode={eraserMode}
           hintActive={hintOpen}
           lockedDigit={lockedDigit}
-          disabled={paused || Boolean(snapshot.completedAt)}
+          disabled={paused || gameOver}
           onDigit={digit}
           onToggleNotes={toggleNotes}
           onToggleEraser={toggleEraser}
@@ -322,7 +334,7 @@ export function GameScreen({
         </section>
       )}
 
-      {paused && (
+      {paused && !gameOver && (
         <div className="pause-overlay">
           <Paper radius="xl" p="xl" shadow="xl" className="pause-card">
             <Stack align="center" gap="md">
@@ -349,10 +361,19 @@ export function GameScreen({
         <Stack><Text c="dimmed">Текущее поле сохранится на этом устройстве. Совместное соединение будет закрыто.</Text><Group grow><Button variant="light" color="gray" onClick={() => setLeaveOpen(false)} className="pressable-control">Остаться</Button><Button color="red" onClick={onLeave} className="pressable-control">Выйти из игры</Button></Group></Stack>
       </Modal>
 
-      <Modal opened={Boolean(snapshot.completedAt)} onClose={() => {}} withCloseButton={false} centered radius="xl" size="sm">
+      <Modal opened={gameOver} onClose={() => {}} withCloseButton={false} centered radius="xl" size="sm">
         <Stack align="center" gap="md" py="md">
-          <ThemeIcon size={72} radius="xl" color="teal" variant="light"><IconCheck size={34} stroke={2.5} /></ThemeIcon>
-          <Stack gap={2} align="center"><Title order={2}>Готово</Title><Text c="dimmed">Поле решено за {formatDuration(elapsedMs(snapshot, snapshot.completedAt ?? now))}</Text></Stack>
+          <ThemeIcon size={72} radius="xl" color={failed ? 'red' : 'teal'} variant="light">
+            {failed ? <IconX size={34} stroke={2.5} /> : <IconCheck size={34} stroke={2.5} />}
+          </ThemeIcon>
+          <Stack gap={2} align="center">
+            <Title order={2}>{failed ? 'Лимит ошибок исчерпан' : 'Готово'}</Title>
+            <Text c="dimmed" ta="center">
+              {failed
+                ? `${remotePlayer ? 'Команда' : 'Ты'} допустил${remotePlayer ? 'а' : ''} ${snapshot.mistakeLimit ?? totalMistakes} ошибок${failedPlayer && remotePlayer ? `. Последняя ошибка: ${failedPlayer.name}.` : '.'}`
+                : `Поле решено за ${formatDuration(elapsedMs(snapshot, snapshot.completedAt ?? now))}`}
+            </Text>
+          </Stack>
           <div className="result-grid">{players.map((player) => { const score = snapshot.scores[player.id]; return <Paper key={player.id} withBorder radius="lg" p="md"><Text size="sm" c="dimmed">{player.name}</Text><Text fz="xl" fw={800}>{scoreFormatter.format(score?.score ?? 0)}</Text><Text size="xs" c="dimmed">{score?.correct ?? 0} верно · {score?.mistakes ?? 0} ошибок</Text></Paper>; })}</div>
           <Button radius="xl" size="md" fullWidth onClick={onLeave} className="pressable-control">На главный экран</Button>
         </Stack>

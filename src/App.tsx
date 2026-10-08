@@ -6,7 +6,7 @@ import { PairingScreen, type PairingResult } from './components/PairingScreen';
 import { RulesModal } from './components/RulesModal';
 import { applyGameAction, createGame, type GameAction } from './game/session';
 import { getDeviceId, getSavedColor, getSavedName, loadGame, saveColor, saveGame, saveName } from './game/storage';
-import type { BoardSize, Coordinate, Difficulty, GameSnapshot, Player, PlayerColor } from './game/types';
+import type { BoardSize, Coordinate, Difficulty, GameSnapshot, MistakeLimit, Player, PlayerColor } from './game/types';
 import { PeerSession, type PeerRole, type PeerState } from './multiplayer/peer';
 import type { WireMessage } from './multiplayer/protocol';
 
@@ -80,7 +80,7 @@ export default function App() {
 
   const pauseForConnectionLoss = () => {
     const current = snapshotRef.current;
-    if (!current || current.completedAt || current.pausedAt !== null) return;
+    if (!current || current.completedAt || current.failedAt || current.pausedAt !== null) return;
     const action: GameAction = { type: 'pause', playerId: localPlayerRef.current.id, at: Date.now() };
     setSnapshot(applyGameAction(current, action).snapshot);
   };
@@ -112,7 +112,7 @@ export default function App() {
     if (message.type === 'cursor' && message.playerId !== localPlayerRef.current.id) setRemoteCursor({ cell: message.cell, notesMode: message.notesMode });
   };
 
-  const startSolo = (difficulty: Difficulty, size: BoardSize) => {
+  const startSolo = (difficulty: Difficulty, size: BoardSize, mistakeLimit: MistakeLimit) => {
     peerRef.current?.close();
     peerRef.current = null;
     setPeerState(null);
@@ -125,13 +125,13 @@ export default function App() {
     playersRef.current = [player];
     setRole('solo');
     roleRef.current = 'solo';
-    setSnapshot(createGame(difficulty, [player.id], size));
+    setSnapshot(createGame(difficulty, [player.id], size, mistakeLimit));
     setScreen('game');
   };
 
   const continueSaved = () => {
     const game = loadGame();
-    if (!game) return;
+    if (!game || game.failedAt) return;
     peerRef.current?.close();
     peerRef.current = null;
     const player: Player = { id: deviceId, name: savedName || 'Ты', color: savedColor };
@@ -190,7 +190,7 @@ export default function App() {
     }
 
     if (result.role === 'host') {
-      const game = createGame(result.difficulty ?? 'medium', nextPlayers.map((player) => player.id), result.size ?? 9);
+      const game = createGame(result.difficulty ?? 'medium', nextPlayers.map((player) => player.id), result.size ?? 9, result.mistakeLimit);
       setSnapshot(game);
       result.session.send({ type: 'snapshot', snapshot: game, players: nextPlayers });
     } else {

@@ -5,6 +5,7 @@ export type NotesGrid = Digit[][][];
 export type Difficulty = 'easy' | 'medium' | 'hard' | 'expert' | 'legendary' | 'epic';
 export type BoardSize = 9 | 12 | 15 | 18;
 export type PlayerColor = 'blue' | 'orange' | 'green' | 'purple' | 'pink' | 'teal';
+export type MistakeLimit = 3 | 5 | 10 | null;
 
 export type Coordinate = {
   row: number;
@@ -30,14 +31,18 @@ export type GameSnapshot = {
   id: string;
   size: BoardSize;
   difficulty: Difficulty;
+  mistakeLimit: MistakeLimit;
   puzzle: Board;
   solution: Board;
   board: Board;
   notes: NotesGrid;
+  attemptedDigits: NotesGrid;
   startedAt: number;
   pausedAt: number | null;
   totalPausedMs: number;
   completedAt: number | null;
+  failedAt: number | null;
+  failedBy: string | null;
   scores: Record<string, PlayerScore>;
   lastSeq: number;
 };
