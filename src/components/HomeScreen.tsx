@@ -7,7 +7,6 @@ import {
   Stack,
   Text,
   ThemeIcon,
-  Title,
   UnstyledButton,
 } from '@mantine/core';
 import { IconArrowRight, IconBook2, IconPlayerPlay, IconUser, IconUsers } from '@tabler/icons-react';
@@ -48,13 +47,16 @@ export function HomeScreen({
         </Group>
 
         <Paper className="home-hero" radius="xl" p="xl" shadow="sm">
-          <Stack gap="lg">
-            <Stack gap="xs">
-              <Title order={1} className="home-title">Решайте одно поле вместе</Title>
-              <Text c="dimmed" size="md" maw={520}>В реальном времени видно выбранную клетку, заметки и ходы второго игрока. Для подключения достаточно двух телефонов и QR-кодов.</Text>
+          <div className="home-hero-layout">
+            <Stack gap="md" className="home-hero-copy">
+              <Stack gap={6}>
+                <Text component="h1" className="home-title" fw={800}>Судоку на двоих</Text>
+                <Text c="dimmed" size="md" className="home-hero-text">Оба видят одно поле, ходы и заметки сразу появляются на втором телефоне.</Text>
+              </Stack>
+              <Button size="lg" radius="xl" color="indigo" leftSection={<IconUsers size={20} stroke={2.1} />} rightSection={<IconArrowRight size={18} />} onClick={onMultiplayer} className="primary-action">Играть вдвоём</Button>
             </Stack>
-            <Button size="lg" radius="xl" color="indigo" leftSection={<IconUsers size={20} stroke={2.1} />} rightSection={<IconArrowRight size={18} />} onClick={onMultiplayer} className="primary-action">Играть вдвоём</Button>
-          </Stack>
+            <DuoIllustration />
+          </div>
         </Paper>
 
         {savedGame && !savedGame.completedAt && (
@@ -83,9 +85,19 @@ export function HomeScreen({
 
             <Stack gap={7}>
               <Text size="sm" c="dimmed">Размер поля</Text>
-              <SimpleGrid cols={4} spacing="xs">
+              <SimpleGrid cols={4} spacing="xs" className="board-size-grid">
                 {boardSizes.map((value) => (
-                  <Button key={value} variant={size === value ? 'light' : 'default'} color="indigo" radius="md" onClick={() => setSize(value)} aria-pressed={size === value}>{value}×{value}</Button>
+                  <Button
+                    key={value}
+                    variant={size === value ? 'light' : 'default'}
+                    color="indigo"
+                    radius="md"
+                    onClick={() => setSize(value)}
+                    aria-pressed={size === value}
+                    className="board-size-button"
+                  >
+                    {value}×{value}
+                  </Button>
                 ))}
               </SimpleGrid>
               <Text size="xs" c="dimmed">Блоки {region.rows}×{region.cols}. После 9 на больших полях используются буквы A–I.</Text>
@@ -105,5 +117,27 @@ export function HomeScreen({
         <Text size="xs" c="dimmed" ta="center" px="md">Партии сохраняются локально. Аккаунт для игры не нужен.</Text>
       </Stack>
     </Container>
+  );
+}
+
+function DuoIllustration() {
+  const cells = ['8', '', '2', '', '', '4', '', '1', '', '', '6', '', '3', '', '', '7'];
+  return (
+    <div className="duo-illustration" aria-hidden="true">
+      <div className="duo-player duo-player-left"><IconUser size={18} stroke={2.2} /></div>
+      <div className="duo-line duo-line-left" />
+      <div className="duo-board-art">
+        {cells.map((value, index) => (
+          <span
+            key={index}
+            className={index === 5 ? 'duo-cell duo-cell-blue' : index === 10 ? 'duo-cell duo-cell-orange' : 'duo-cell'}
+          >
+            {value}
+          </span>
+        ))}
+      </div>
+      <div className="duo-line duo-line-right" />
+      <div className="duo-player duo-player-right"><IconUser size={18} stroke={2.2} /></div>
+    </div>
   );
 }
