@@ -15,51 +15,50 @@
   vertical-align: middle;
 }
 
-/* Dedicated icon wrappers use absolute centering. This avoids browser/Mantine
-   inline metrics moving an SVG inside an otherwise centered circular wrapper. */
+/* Dedicated circular icon wrappers use physical inset coordinates on purpose.
+   Do not mix left/top with inset-inline/inset-block: mobile Chrome resolves the
+   logical inset declarations later and can reset the physical coordinates. */
 .app-bg .mantine-ThemeIcon-root > svg,
 .app-bg .mantine-ActionIcon-root > svg {
   position: absolute !important;
-  left: 50% !important;
-  top: 50% !important;
+  inset: 50% auto auto 50% !important;
   margin: 0 !important;
-  inset-inline: auto !important;
-  inset-block: auto !important;
   translate: none !important;
   transform: translate(-50%, -50%) !important;
-  transform-origin: center !important;
+  transform-origin: center center !important;
   transform-box: fill-box;
   display: block !important;
-  flex: 0 0 auto !important;
+  flex: none !important;
 }
 
-/* Alert icons need the same treatment: Mantine's icon slot has its own
-   inline/flex metrics and was visibly pushing Wi-Fi and info icons left. */
+/* Mantine Alert has its own flex metrics. Give the icon a fixed geometry and
+   center the SVG independently of line-height, margins and writing mode. */
 .app-bg .mantine-Alert-icon {
   position: relative !important;
+  width: 36px !important;
+  height: 36px !important;
+  min-width: 36px !important;
+  min-height: 36px !important;
+  flex: 0 0 36px !important;
   display: block !important;
-  flex: 0 0 auto !important;
   align-self: center !important;
+  padding: 0 !important;
   line-height: 0 !important;
 }
 
 .app-bg .mantine-Alert-icon > svg {
   position: absolute !important;
-  left: 50% !important;
-  top: 50% !important;
+  inset: 50% auto auto 50% !important;
   margin: 0 !important;
-  inset-inline: auto !important;
-  inset-block: auto !important;
   translate: none !important;
   transform: translate(-50%, -50%) !important;
-  transform-origin: center !important;
+  transform-origin: center center !important;
   transform-box: fill-box;
   display: block !important;
-  flex: 0 0 auto !important;
+  flex: none !important;
 }
 
-/* Center icons only inside dedicated icon wrappers. Do not touch arbitrary SVGs
-   inside flex controls such as dropdown chevrons. */
+/* Inline button/menu sections remain normal flow; only normalize their SVG box. */
 .app-bg .mantine-Button-section > svg,
 .app-bg .mantine-Menu-itemSection > svg,
 .app-bg .reference-connection > svg,
@@ -69,7 +68,6 @@
   flex: 0 0 auto !important;
   margin: 0 !important;
   position: static !important;
-  inset: auto !important;
   vertical-align: middle !important;
   translate: none !important;
   transform-box: fill-box;
@@ -101,6 +99,7 @@
 
 .reference-game .reference-header-action,
 .reference-game .reference-tool {
+  position: relative !important;
   display: grid !important;
   place-items: center !important;
   align-items: center !important;
@@ -111,10 +110,11 @@
 .reference-game .reference-header-action > svg,
 .reference-game .reference-tool > svg {
   position: absolute !important;
-  left: 50% !important;
-  top: 50% !important;
+  inset: 50% auto auto 50% !important;
   margin: 0 !important;
+  translate: none !important;
   transform: translate(-50%, -50%) !important;
+  transform-origin: center center !important;
 }
 
 .reference-game .history-controls {
