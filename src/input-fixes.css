@@ -30,6 +30,15 @@
   border-radius: 999px !important;
 }
 
+/* Clicking an empty cell softly reveals its row, column and region. */
+.reference-game .sudoku-cell.selection-peer:not(.same-value):not(.hint-related):not(.hint-target):not(.hint-blocked):not(.hint-source) {
+  background: #f1f5f9;
+}
+
+.reference-game .sudoku-cell.selection-peer.given:not(.same-value):not(.hint-related):not(.hint-target):not(.hint-blocked):not(.hint-source) {
+  background: #f3f6f9;
+}
+
 /* Matching candidates stay readable when the same symbol is active on the number pad. */
 .reference-game .notes-grid span.note-match {
   width: 1.45em;
