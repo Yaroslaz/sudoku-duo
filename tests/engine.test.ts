@@ -4,8 +4,8 @@ import { applyGameAction, createGame, elapsedMs } from '../src/game/session';
 import type { BoardSize, Difficulty, Digit } from '../src/game/types';
 
 describe('Sudoku generator', () => {
-  const difficulties: Difficulty[] = ['easy', 'medium', 'hard', 'expert'];
-  const sizes: BoardSize[] = [4, 5, 6, 9];
+  const difficulties: Difficulty[] = ['easy', 'medium', 'hard', 'expert', 'legendary', 'epic'];
+  const sizes: BoardSize[] = [9, 12, 15, 18];
 
   for (const size of sizes) {
     it(`creates a valid unique ${size}x${size} puzzle`, () => {
@@ -32,7 +32,7 @@ describe('Sudoku generator', () => {
 
 describe('Shared game state', () => {
   it('synchronizes notes, scoring and pause time in the snapshot', () => {
-    const game = createGame('easy', ['host', 'guest'], 6, 'vitest-session', 1_000);
+    const game = createGame('easy', ['host', 'guest'], 12, 'vitest-session', 1_000);
     let row = 0;
     let col = 0;
     outer: for (let r = 0; r < game.size; r += 1) {
@@ -41,7 +41,7 @@ describe('Shared game state', () => {
       }
     }
     const correct = game.solution[row][col] as Digit;
-    const wrong = ([1, 2, 3, 4, 5, 6] as Digit[]).find((digit) => digit !== correct)!;
+    const wrong = Array.from({ length: game.size }, (_, index) => index + 1).find((digit) => digit !== correct)!;
 
     const note = applyGameAction(game, { type: 'note', playerId: 'host', row, col, digit: correct });
     expect(note.snapshot.notes[row][col]).toContain(correct);
