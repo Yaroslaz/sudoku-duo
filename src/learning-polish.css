@@ -1,3 +1,7 @@
+.reference-game .sudoku-cell.selection-peer {
+  background: #f1f5f9;
+}
+
 .reference-game .sudoku-cell.selected-local {
   background: #acd8f4 !important;
   color: #185d9f !important;
@@ -38,7 +42,7 @@
   pointer-events: none;
 }
 
-/* Hint source rings are painted over the value and never participate in grid sizing. */
+/* The teaching ring is an overlay only: it never changes a cell's measured size. */
 .reference-game .sudoku-cell.hint-source .cell-value {
   position: relative;
   z-index: 1;
@@ -50,12 +54,13 @@
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 1.5em;
-  height: 1.5em;
+  width: 1.45em;
+  height: 1.45em;
+  box-sizing: border-box;
   transform: translate(-50%, -50%);
+  border: 2px solid #dfad31;
   border-radius: 50%;
-  background: #fff0ae;
-  box-shadow: 0 0 0 2px #dfad31;
+  background: rgba(255, 240, 174, .72);
   z-index: -1;
   pointer-events: none;
 }
@@ -65,45 +70,67 @@
   line-height: 1.35;
 }
 
+.hint-example-section {
+  min-width: 0;
+}
+
+.hint-example-label {
+  display: block;
+  margin-bottom: 4px;
+  color: #7a8391;
+  font-size: .68rem;
+  font-weight: 650;
+}
+
 .hint-example {
-  width: fit-content;
   max-width: 100%;
   display: grid;
-  gap: 3px;
-  padding: 5px;
+  gap: 2px;
+  padding: 4px;
   border: 1px solid #e0e4ea;
   border-radius: 10px;
   background: #fbfcfe;
+  box-sizing: border-box;
 }
 
-.hint-example-row {
-  grid-template-columns: repeat(5, 34px);
+.hint-example-live-row {
+  width: min(100%, 360px);
+  grid-auto-rows: 28px;
 }
 
-.hint-example-column {
-  grid-template-rows: repeat(5, 28px);
-  grid-template-columns: 38px;
+.hint-example-live-column {
+  width: 34px;
+  grid-template-columns: 34px;
 }
 
-.hint-example-box {
-  grid-template-columns: repeat(3, 30px);
-  grid-template-rows: repeat(3, 30px);
+.hint-example-live-box {
+  width: fit-content;
 }
 
-.hint-example span {
+.hint-example span,
+.hint-rule-axis span,
+.hint-rule-box span {
   display: grid;
   place-items: center;
   min-width: 0;
   min-height: 0;
+  box-sizing: border-box;
   border: 1px solid #d7dce5;
   background: #fff;
   color: #5d6675;
-  font-size: .86rem;
+  font-size: .78rem;
   font-weight: 700;
   line-height: 1;
 }
 
-.hint-example span.blocked {
+.hint-example-live-box span {
+  width: 27px;
+  height: 27px;
+}
+
+.hint-example span.blocked,
+.hint-rule-axis span:not(.target),
+.hint-rule-box span:not(.target) {
   color: #b37b62;
   background: #fff7f1;
 }
@@ -114,124 +141,172 @@
   border-color: #e4bc55;
 }
 
-.hint-example span.target {
+.hint-example span.filled {
+  color: #596474;
+  background: #f6f8fa;
+}
+
+.hint-example span.candidate {
+  color: #5681ad;
+  background: #f2f7fd;
+}
+
+.hint-example span.empty {
+  color: #b1b7c0;
+  background: #fff;
+}
+
+.hint-example span.target,
+.hint-rule-axis span.target,
+.hint-rule-box span.target {
   color: #194f8b;
   background: #dbeaff;
   border-color: #5b8dca;
   box-shadow: inset 0 0 0 1px #5b8dca;
 }
 
-/* Naked-single examples use a row/column cross instead of a misleading 3×3 box. */
-.hint-example-box:has(.source) {
-  position: relative;
-  grid-template-columns: repeat(5, 30px);
-  grid-template-rows: repeat(5, 30px);
-  padding: 18px;
-  gap: 3px;
+.hint-context-layout {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 10px;
+  align-items: start;
+  width: fit-content;
+  max-width: 100%;
 }
 
-.hint-example-box:has(.source)::before,
-.hint-example-box:has(.source)::after {
+.hint-cross-example {
+  position: relative;
+  width: 124px;
+  height: 124px;
+  display: grid;
+  grid-template-columns: repeat(5, 24px);
+  grid-template-rows: repeat(5, 24px);
+  gap: 1px;
+}
+
+.hint-cross-example > span {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  box-sizing: border-box;
+  border: 1px solid #d7dce5;
+  background: #fff;
+  color: #667180;
+  font-size: .72rem;
+  font-weight: 700;
+}
+
+.hint-cross-example > span.ghost {
+  border-color: transparent;
+  background: transparent;
+}
+
+.hint-cross-example > span.axis {
+  background: #f6f8fa;
+}
+
+.hint-cross-example > span.source {
+  color: #8a6409;
+  background: #fff4bf;
+  border-color: #e4bc55;
+}
+
+.hint-cross-example > span.target {
+  color: #194f8b;
+  background: #dbeaff;
+  border-color: #5b8dca;
+  box-shadow: inset 0 0 0 1px #5b8dca;
+}
+
+.hint-cross-example > i {
   position: absolute;
-  z-index: 3;
   padding: 1px 4px;
   border-radius: 999px;
   background: #eef3f8;
-  color: #788291;
-  font-size: 8px;
+  color: #7a8391;
+  font-size: 7px;
+  font-style: normal;
   line-height: 1.4;
   pointer-events: none;
 }
 
-.hint-example-box:has(.source)::before {
-  content: 'строка';
-  left: 5px;
-  top: 50%;
-  transform: translateY(-50%);
+.cross-row-label {
+  right: -29px;
+  top: 55px;
 }
 
-.hint-example-box:has(.source)::after {
-  content: 'столбец';
-  left: 50%;
-  top: 4px;
-  transform: translateX(-50%);
+.cross-column-label {
+  left: 47px;
+  top: -9px;
+  transform: rotate(-90deg);
+  transform-origin: center;
 }
 
-.hint-example-box:has(.source) span:nth-child(1) { grid-column: 1; grid-row: 3; }
-.hint-example-box:has(.source) span:nth-child(2) { grid-column: 2; grid-row: 3; }
-.hint-example-box:has(.source) span:nth-child(3) { grid-column: 3; grid-row: 1; }
-.hint-example-box:has(.source) span:nth-child(4) { grid-column: 3; grid-row: 2; }
-.hint-example-box:has(.source) span:nth-child(5) { grid-column: 3; grid-row: 3; }
-.hint-example-box:has(.source) span:nth-child(6) { grid-column: 3; grid-row: 4; }
-.hint-example-box:has(.source) span:nth-child(7) { grid-column: 3; grid-row: 5; }
-.hint-example-box:has(.source) span:nth-child(8) { grid-column: 4; grid-row: 3; }
-.hint-example-box:has(.source) span:nth-child(9) { grid-column: 5; grid-row: 3; }
-
-.hint-rule-diagram {
-  position: relative;
-  width: 132px;
-  height: 76px;
+.hint-rule-axis {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  grid-template-rows: repeat(3, 1fr);
-  border: 1px solid #d5dbe4;
-  background: #fff;
-  overflow: hidden;
+  gap: 2px;
+  width: fit-content;
 }
 
-.hint-rule-diagram::before,
-.hint-rule-diagram::after {
-  content: '';
+.hint-rule-row {
+  grid-template-columns: repeat(7, 28px);
+  grid-template-rows: 28px;
+}
+
+.hint-rule-column {
+  grid-template-columns: 30px;
+  grid-template-rows: repeat(5, 25px);
+}
+
+.hint-rule-box {
+  display: grid;
+  gap: 2px;
+  width: fit-content;
+  padding: 4px;
+  border: 1px solid #e0e4ea;
+  border-radius: 9px;
+  background: #fbfcfe;
+}
+
+.hint-rule-box span {
+  width: 24px;
+  height: 24px;
+}
+
+.hint-rule-cross-simple {
+  position: relative;
+  width: 148px;
+  height: 86px;
+  border-radius: 10px;
+  background:
+    linear-gradient(transparent 37%, #eef2f6 37%, #eef2f6 63%, transparent 63%),
+    linear-gradient(90deg, transparent 40%, #eef2f6 40%, #eef2f6 60%, transparent 60%);
+  border: 1px solid #dce2e9;
+}
+
+.hint-rule-cross-simple .rule-row,
+.hint-rule-cross-simple .rule-column,
+.hint-rule-cross-simple small,
+.hint-rule-cross-simple strong {
   position: absolute;
-  background: #e4e8ee;
-  pointer-events: none;
 }
 
-.hint-rule-diagram::before {
-  left: 0;
-  right: 0;
-  top: 50%;
-  height: 22px;
-  transform: translateY(-50%);
-}
-
-.hint-rule-diagram::after {
-  top: 0;
-  bottom: 0;
-  left: 50%;
-  width: 28px;
-  transform: translateX(-50%);
-}
-
-.hint-rule-diagram span,
-.hint-rule-diagram strong {
-  position: absolute;
-  z-index: 2;
-}
-
-.hint-rule-diagram .rule-row {
-  left: 5px;
-  top: 29px;
-  color: #7f8794;
+.hint-rule-cross-simple .rule-row {
+  left: 7px;
+  top: 35px;
+  color: #7a8391;
   font-size: 9px;
 }
 
-.hint-rule-diagram .rule-column {
-  left: 50%;
-  top: 4px;
-  transform: translateX(-50%);
-  color: #7f8794;
+.hint-rule-cross-simple .rule-column {
+  left: 59px;
+  top: 6px;
+  color: #7a8391;
   font-size: 9px;
 }
 
-.hint-rule-diagram .rule-box {
-  right: 5px;
-  bottom: 4px;
-  color: #7f8794;
-  font-size: 9px;
-}
-
-.hint-rule-diagram strong {
+.hint-rule-cross-simple strong {
   left: 50%;
   top: 50%;
   width: 30px;
@@ -242,27 +317,53 @@
   border-radius: 50%;
   color: #194f8b;
   background: #dbeaff;
-  box-shadow: 0 0 0 2px #5b8dca;
-  font-size: 1rem;
+  box-shadow: inset 0 0 0 2px #5b8dca;
+}
+
+.hint-rule-cross-simple small {
+  right: 7px;
+  bottom: 6px;
+  color: #7a8391;
+  font-size: 9px;
 }
 
 @media (max-width: 390px) {
-  .hint-example-row {
-    grid-template-columns: repeat(5, 29px);
+  .hint-context-layout {
+    gap: 6px;
   }
 
-  .hint-example-box:not(:has(.source)) {
-    grid-template-columns: repeat(3, 27px);
-    grid-template-rows: repeat(3, 27px);
+  .hint-cross-example {
+    width: 109px;
+    height: 109px;
+    grid-template-columns: repeat(5, 21px);
+    grid-template-rows: repeat(5, 21px);
   }
 
-  .hint-example-box:has(.source) {
-    grid-template-columns: repeat(5, 26px);
-    grid-template-rows: repeat(5, 26px);
-    padding: 17px;
+  .hint-cross-example > span {
+    width: 21px;
+    height: 21px;
+    font-size: .66rem;
   }
 
-  .hint-example-column {
-    grid-template-rows: repeat(5, 25px);
+  .cross-row-label {
+    display: none;
+  }
+
+  .cross-column-label {
+    display: none;
+  }
+
+  .hint-example-live-row {
+    grid-auto-rows: 25px;
+  }
+
+  .hint-example-live-box span {
+    width: 24px;
+    height: 24px;
+  }
+
+  .hint-rule-row {
+    grid-template-columns: repeat(7, 25px);
+    grid-template-rows: 25px;
   }
 }
