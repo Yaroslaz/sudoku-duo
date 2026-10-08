@@ -3,7 +3,6 @@ import {
   Button,
   Container,
   Group,
-  Menu,
   Paper,
   SimpleGrid,
   Stack,
@@ -15,8 +14,6 @@ import {
   IconArrowLeft,
   IconArrowRight,
   IconBook2,
-  IconCheck,
-  IconChevronDown,
   IconPlayerPlay,
   IconTrophy,
   IconUser,
@@ -25,6 +22,7 @@ import {
 import { useState, type CSSProperties } from 'react';
 import { boardSizes, difficulties, difficultyLabels, regionDimensions } from '../game/engine';
 import type { BoardSize, Difficulty, GameSnapshot, MistakeLimit } from '../game/types';
+import { AdaptiveMenu } from './AdaptiveMenu';
 import { RecordsScreen } from './RecordsScreen';
 
 export function HomeScreen({
@@ -267,62 +265,35 @@ function BoardModeGrid({ value, onChange }: { value: BoardSize; onChange: (value
 }
 
 function DifficultyMenu({ value, onChange }: { value: Difficulty; onChange: (value: Difficulty) => void }) {
+  const options = difficulties.map((item) => ({ value: item, label: difficultyLabels[item] }));
   return (
     <Stack gap="sm">
       <Text fw={700}>Сложность</Text>
-      <Menu position="bottom-start" width="target" offset={8} withinPortal trapFocus={false} transitionProps={{ transition: 'pop-top-left', duration: 170 }}>
-        <Menu.Target>
-          <UnstyledButton className="difficulty-menu-target" aria-label="Выбрать сложность">
-            <span>{difficultyLabels[value]}</span>
-            <IconChevronDown size={20} />
-          </UnstyledButton>
-        </Menu.Target>
-        <Menu.Dropdown className="difficulty-menu-dropdown">
-          {difficulties.map((item) => (
-            <Menu.Item key={item} onClick={() => onChange(item)} rightSection={item === value ? <IconCheck size={17} /> : null} className={item === value ? 'difficulty-menu-item active' : 'difficulty-menu-item'}>
-              {difficultyLabels[item]}
-            </Menu.Item>
-          ))}
-        </Menu.Dropdown>
-      </Menu>
+      <AdaptiveMenu value={value} options={options} ariaLabel="Выбрать сложность" onChange={(next) => onChange(next as Difficulty)} />
       <Text size="xs" c="dimmed">{difficultyDescription(value)}</Text>
     </Stack>
   );
 }
 
 function MistakeLimitMenu({ value, onChange }: { value: MistakeLimit; onChange: (value: MistakeLimit) => void }) {
-  const options: { value: MistakeLimit; label: string }[] = [
-    { value: null, label: 'Без лимита' },
-    { value: 3, label: '3 ошибки' },
-    { value: 5, label: '5 ошибок' },
-    { value: 10, label: '10 ошибок' },
+  const options = [
+    { value: 'none', label: 'Без лимита' },
+    { value: '3', label: '3 ошибки' },
+    { value: '5', label: '5 ошибок' },
+    { value: '10', label: '10 ошибок' },
   ];
   return (
     <Stack gap="sm">
       <Text fw={700}>Предел ошибок</Text>
-      <Menu position="bottom-start" width="target" offset={8} withinPortal trapFocus={false} transitionProps={{ transition: 'pop-top-left', duration: 170 }}>
-        <Menu.Target>
-          <UnstyledButton className="difficulty-menu-target" aria-label="Выбрать предел ошибок">
-            <span>{mistakeLimitLabel(value)}</span>
-            <IconChevronDown size={20} />
-          </UnstyledButton>
-        </Menu.Target>
-        <Menu.Dropdown className="difficulty-menu-dropdown">
-          {options.map((item) => (
-            <Menu.Item key={item.label} onClick={() => onChange(item.value)} rightSection={item.value === value ? <IconCheck size={17} /> : null} className={item.value === value ? 'difficulty-menu-item active' : 'difficulty-menu-item'}>
-              {item.label}
-            </Menu.Item>
-          ))}
-        </Menu.Dropdown>
-      </Menu>
+      <AdaptiveMenu
+        value={value === null ? 'none' : String(value)}
+        options={options}
+        ariaLabel="Выбрать предел ошибок"
+        onChange={(next) => onChange(next === '3' ? 3 : next === '5' ? 5 : next === '10' ? 10 : null)}
+      />
       <Text size="xs" c="dimmed">{value === null ? 'Ошибки считаются, но не завершают партию.' : `После ${value}-й ошибки партия завершится.`}</Text>
     </Stack>
   );
-}
-
-function mistakeLimitLabel(value: MistakeLimit) {
-  if (value === null) return 'Без лимита';
-  return `${value} ${value === 3 ? 'ошибки' : 'ошибок'}`;
 }
 
 function BoardSizeIllustration({ size }: { size: BoardSize }) {
