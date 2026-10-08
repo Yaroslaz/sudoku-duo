@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
 
-export function useQrFrames(frames: string[], intervalMs = 1100) {
+export function useQrFrames(frames: string[], intervalMs = 1650) {
   const [index, setIndex] = useState(0);
   const [dataUrl, setDataUrl] = useState('');
 
@@ -21,8 +21,8 @@ export function useQrFrames(frames: string[], intervalMs = 1100) {
       return;
     }
     QRCode.toDataURL(frame, {
-      width: 480,
-      margin: 3,
+      width: 520,
+      margin: 2,
       errorCorrectionLevel: 'L',
       color: { dark: '#10131a', light: '#ffffff' },
     }).then((url) => {
