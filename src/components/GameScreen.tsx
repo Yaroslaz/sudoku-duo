@@ -31,6 +31,8 @@ import { SudokuBoard } from './SudokuBoard';
 
 type PaintMode = 'add' | 'erase';
 
+const scoreFormatter = new Intl.NumberFormat('ru-RU');
+
 export function GameScreen({
   snapshot,
   players,
@@ -54,6 +56,7 @@ export function GameScreen({
 }) {
   const [selected, setSelected] = useState<Coordinate | null>(null);
   const [notesMode, setNotesMode] = useState(false);
+  const [eraserMode, setEraserMode] = useState(false);
   const [lockedDigit, setLockedDigit] = useState<Digit | null>(null);
   const [hint, setHint] = useState<Hint | null>(null);
   const [hintOpen, setHintOpen] = useState(false);
@@ -94,11 +97,28 @@ export function GameScreen({
   const toggleNotes = () => {
     const next = !notesMode;
     setNotesMode(next);
+    setEraserMode(false);
     onCursor(selected, next);
+  };
+
+  const toggleEraser = () => {
+    const next = !eraserMode;
+    setEraserMode(next);
+    if (next) {
+      setNotesMode(false);
+      setLockedDigit(null);
+      onCursor(selected, false);
+    }
+  };
+
+  const changeLockedDigit = (digit: Digit | null) => {
+    setEraserMode(false);
+    setLockedDigit(digit);
   };
 
   const digit = (value: Digit) => {
     if (!selected || paused || snapshot.completedAt || snapshot.puzzle[selected.row][selected.col] !== 0) return;
+    setEraserMode(false);
 
     if (notesMode) {
       if (snapshot.board[selected.row][selected.col] !== 0) return;
@@ -137,16 +157,29 @@ export function GameScreen({
     onAction({ type: 'set', playerId: localPlayer.id, row, col, digit: lockedDigit });
   };
 
-  const clear = () => {
-    if (!selected || paused || snapshot.puzzle[selected.row][selected.col] !== 0) return;
-    onAction({ type: 'clear', playerId: localPlayer.id, row: selected.row, col: selected.col });
+  const eraseCell = (row: number, col: number) => {
+    if (paused || snapshot.completedAt || snapshot.puzzle[row][col] !== 0) return;
+    setSelected({ row, col });
+    onCursor({ row, col }, false);
+    if (snapshot.board[row][col] === 0 && snapshot.notes[row][col].length === 0) return;
+    onAction({ type: 'clear', playerId: localPlayer.id, row, col });
   };
 
   const askHint = () => {
+    setEraserMode(false);
     const found = findHint(snapshot.board);
     setHint(found);
+    if (found) {
+      setSelected(found.cell);
+      onCursor(found.cell, false);
+    }
     setHintOpen(true);
     if (found) onAction({ type: 'hint', playerId: localPlayer.id });
+  };
+
+  const closeHint = () => {
+    setHintOpen(false);
+    setHint(null);
   };
 
   const applyHint = () => {
@@ -154,10 +187,10 @@ export function GameScreen({
     setSelected(hint.cell);
     onCursor(hint.cell, false);
     setNotesMode(false);
+    setEraserMode(false);
     setLockedDigit(null);
     onAction({ type: 'set', playerId: localPlayer.id, row: hint.cell.row, col: hint.cell.col, digit: hint.digit });
-    setHintOpen(false);
-    setHint(null);
+    closeHint();
   };
 
   const togglePause = () => {
@@ -167,18 +200,35 @@ export function GameScreen({
   };
 
   const scoreText = remotePlayer
-    ? `${localScore?.score ?? 0} : ${remoteScore?.score ?? 0}`
-    : String(localScore?.score ?? 0);
+    ? `${scoreFormatter.format(localScore?.score ?? 0)} : ${scoreFormatter.format(remoteScore?.score ?? 0)}`
+    : scoreFormatter.format(localScore?.score ?? 0);
 
   return (
-    <main className={`game-shell reference-game ${notesMode ? 'notes-mode-active' : ''} ${lockedDigit ? 'locked-mode-active' : ''}`}>
+    <main className={`game-shell reference-game ${notesMode ? 'notes-mode-active' : ''} ${eraserMode ? 'eraser-mode-active' : ''} ${lockedDigit ? 'locked-mode-active' : ''}`}>
       <header className="reference-header">
-        <ActionIcon variant="subtle" color="indigo" size={48} radius="xl" aria-label="Выйти из игры" onClick={() => setLeaveOpen(true)}>
+        <ActionIcon
+          variant="subtle"
+          color="indigo"
+          size={48}
+          radius="xl"
+          aria-label="Выйти из игры"
+          onClick={() => setLeaveOpen(true)}
+          className="reference-header-action pressable-control"
+        >
           <IconArrowLeft size={31} stroke={1.8} />
         </ActionIcon>
         <Text className="reference-progress" fw={700}>{localScore?.correct ?? 0}</Text>
         <Group gap={4} wrap="nowrap">
-          <ActionIcon variant="subtle" color="indigo" size={48} radius="xl" aria-label="Открыть правила" onClick={() => setRulesOpen(true)}>
+          <ActionIcon
+            variant={rulesOpen ? 'light' : 'subtle'}
+            color="indigo"
+            size={48}
+            radius="xl"
+            aria-label="Открыть правила"
+            aria-pressed={rulesOpen}
+            onClick={() => setRulesOpen(true)}
+            className="reference-header-action pressable-control"
+          >
             <IconHelpCircle size={29} stroke={1.8} />
           </ActionIcon>
           {peerState && (
@@ -196,7 +246,7 @@ export function GameScreen({
       <section className="reference-stats" aria-label="Статистика игры">
         <div className="reference-stat">
           <Text className="reference-stat-label">Счёт</Text>
-          <Text className="reference-stat-value">{scoreText}</Text>
+          <Text className="reference-stat-value reference-score-value">{scoreText}</Text>
         </div>
         <div className="reference-stat">
           <Text className="reference-stat-label">Уровень</Text>
@@ -204,22 +254,23 @@ export function GameScreen({
         </div>
         <div className="reference-stat">
           <Text className="reference-stat-label">Ошибки</Text>
-          <Text className="reference-stat-value">{localScore?.mistakes ?? 0}</Text>
+          <Text className="reference-stat-value">{scoreFormatter.format(localScore?.mistakes ?? 0)}</Text>
         </div>
         <div className="reference-stat reference-time-stat">
-          <div>
+          <div className="reference-time-copy">
             <Text className="reference-stat-label">Время</Text>
             <Text className="reference-stat-value timer">{formatDuration(elapsedMs(snapshot, now))}</Text>
           </div>
           <ActionIcon
-            variant="light"
-            color="gray"
+            variant={paused ? 'filled' : 'light'}
+            color={paused ? 'indigo' : 'gray'}
             size={44}
             radius="xl"
             aria-label={paused ? 'Продолжить игру' : 'Поставить на паузу'}
+            aria-pressed={paused}
             onClick={togglePause}
             disabled={Boolean(snapshot.completedAt)}
-            className="reference-pause"
+            className="reference-pause pressable-control"
           >
             {paused ? <IconPlayerPlay size={24} stroke={1.8} /> : <IconPlayerPause size={24} stroke={1.8} />}
           </ActionIcon>
@@ -240,9 +291,11 @@ export function GameScreen({
           remoteSelected={remoteCursor?.cell ?? null}
           hint={hintOpen ? hint : null}
           notesMode={notesMode}
+          eraserMode={eraserMode}
           lockedDigit={lockedDigit}
           onSelect={select}
           onPaintCell={paintCell}
+          onEraseCell={eraseCell}
         />
       </section>
 
@@ -250,13 +303,15 @@ export function GameScreen({
         <NumberPad
           remaining={remaining}
           notesMode={notesMode}
+          eraserMode={eraserMode}
+          hintActive={hintOpen}
           lockedDigit={lockedDigit}
           disabled={paused || Boolean(snapshot.completedAt)}
           onDigit={digit}
           onToggleNotes={toggleNotes}
-          onClear={clear}
+          onToggleEraser={toggleEraser}
           onHint={askHint}
-          onLockDigit={setLockedDigit}
+          onLockDigit={changeLockedDigit}
         />
       </section>
 
@@ -271,21 +326,21 @@ export function GameScreen({
                 <Title order={2}>Игра на паузе</Title>
                 <Text c="dimmed" ta="center">Поле скрыто у обоих игроков. Таймер тоже остановлен.</Text>
               </Stack>
-              <Button radius="xl" size="md" leftSection={<IconPlayerPlay size={18} />} onClick={togglePause}>Продолжить</Button>
+              <Button radius="xl" size="md" leftSection={<IconPlayerPlay size={18} />} onClick={togglePause} className="pressable-control">Продолжить</Button>
             </Stack>
           </Paper>
         </div>
       )}
 
-      <HintDrawer hint={hint} opened={hintOpen} onClose={() => { setHintOpen(false); setHint(null); }} onApply={applyHint} />
+      <HintDrawer hint={hint} opened={hintOpen} onClose={closeHint} onApply={applyHint} />
       <RulesModal opened={rulesOpen} onClose={() => setRulesOpen(false)} />
 
       <Modal opened={leaveOpen} onClose={() => setLeaveOpen(false)} title="Выйти из игры?" centered radius="xl">
         <Stack>
           <Text c="dimmed">Текущее поле сохранится на этом устройстве. Совместное соединение будет закрыто.</Text>
           <Group grow>
-            <Button variant="light" color="gray" onClick={() => setLeaveOpen(false)}>Остаться</Button>
-            <Button color="red" onClick={onLeave}>Выйти из игры</Button>
+            <Button variant="light" color="gray" onClick={() => setLeaveOpen(false)} className="pressable-control">Остаться</Button>
+            <Button color="red" onClick={onLeave} className="pressable-control">Выйти из игры</Button>
           </Group>
         </Stack>
       </Modal>
@@ -299,10 +354,10 @@ export function GameScreen({
           <div className="result-grid">
             {players.map((player) => {
               const score = snapshot.scores[player.id];
-              return <Paper key={player.id} withBorder radius="lg" p="md"><Text size="sm" c="dimmed">{player.name}</Text><Text fz="xl" fw={800}>{score?.score ?? 0}</Text><Text size="xs" c="dimmed">{score?.correct ?? 0} верно · {score?.mistakes ?? 0} ошибок</Text></Paper>;
+              return <Paper key={player.id} withBorder radius="lg" p="md"><Text size="sm" c="dimmed">{player.name}</Text><Text fz="xl" fw={800}>{scoreFormatter.format(score?.score ?? 0)}</Text><Text size="xs" c="dimmed">{score?.correct ?? 0} верно · {score?.mistakes ?? 0} ошибок</Text></Paper>;
             })}
           </div>
-          <Button radius="xl" size="md" fullWidth onClick={onLeave}>На главный экран</Button>
+          <Button radius="xl" size="md" fullWidth onClick={onLeave} className="pressable-control">На главный экран</Button>
         </Stack>
       </Modal>
     </main>
