@@ -67,13 +67,15 @@ export function NumberPad({
               variant={locked ? 'filled' : 'default'}
               color={locked ? 'indigo' : 'gray'}
               className={`number-button ${locked ? 'locked' : ''} ${notesMode ? 'note-number' : ''}`}
-              disabled={disabled || unavailable}
+              disabled={disabled || (unavailable && !locked)}
               aria-pressed={locked}
-              aria-label={locked ? `Цифра ${digit} закреплена` : `Ввести ${digit}. Удерживай, чтобы закрепить`}
-              onPointerDown={() => startHold(digit)}
+              aria-label={locked ? `Цифра ${digit} закреплена. Удерживай, чтобы снять закрепление` : `Ввести ${digit}. Удерживай, чтобы закрепить`}
+              onPointerDown={(event) => {
+                event.currentTarget.setPointerCapture?.(event.pointerId);
+                startHold(digit);
+              }}
               onPointerUp={clearHold}
               onPointerCancel={clearHold}
-              onPointerLeave={clearHold}
               onContextMenu={(event) => event.preventDefault()}
               onClick={() => handleDigitClick(digit)}
             >
