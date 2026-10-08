@@ -1,7 +1,6 @@
 import {
   ActionIcon,
   Avatar,
-  Badge,
   Button,
   Group,
   Modal,
@@ -16,8 +15,6 @@ import {
   IconBulb,
   IconCheck,
   IconHelpCircle,
-  IconLock,
-  IconPencil,
   IconPlayerPause,
   IconPlayerPlay,
   IconWifi,
@@ -33,6 +30,8 @@ import { HintDrawer } from './HintDrawer';
 import { NumberPad } from './NumberPad';
 import { RulesModal } from './RulesModal';
 import { SudokuBoard } from './SudokuBoard';
+
+type PaintMode = 'add' | 'erase';
 
 export function GameScreen({
   snapshot,
@@ -102,19 +101,37 @@ export function GameScreen({
 
   const digit = (value: Digit) => {
     if (!selected || paused || snapshot.completedAt || snapshot.puzzle[selected.row][selected.col] !== 0) return;
-    onAction(notesMode
-      ? { type: 'note', playerId: localPlayer.id, row: selected.row, col: selected.col, digit: value }
-      : { type: 'set', playerId: localPlayer.id, row: selected.row, col: selected.col, digit: value });
+
+    if (notesMode) {
+      if (snapshot.board[selected.row][selected.col] !== 0) return;
+      onAction({ type: 'note', playerId: localPlayer.id, row: selected.row, col: selected.col, digit: value });
+      return;
+    }
+
+    if (snapshot.board[selected.row][selected.col] === value) {
+      onAction({ type: 'clear', playerId: localPlayer.id, row: selected.row, col: selected.col });
+      return;
+    }
+
+    onAction({ type: 'set', playerId: localPlayer.id, row: selected.row, col: selected.col, digit: value });
   };
 
-  const paintCell = (row: number, col: number) => {
+  const paintCell = (row: number, col: number, mode: PaintMode) => {
     if (!lockedDigit || paused || snapshot.completedAt || snapshot.puzzle[row][col] !== 0) return;
     setSelected({ row, col });
     onCursor({ row, col }, notesMode);
 
     if (notesMode) {
-      if (snapshot.board[row][col] !== 0 || snapshot.notes[row][col].includes(lockedDigit)) return;
+      if (snapshot.board[row][col] !== 0) return;
+      const hasNote = snapshot.notes[row][col].includes(lockedDigit);
+      if ((mode === 'erase' && !hasNote) || (mode === 'add' && hasNote)) return;
       onAction({ type: 'note', playerId: localPlayer.id, row, col, digit: lockedDigit });
+      return;
+    }
+
+    if (mode === 'erase') {
+      if (snapshot.board[row][col] !== lockedDigit) return;
+      onAction({ type: 'clear', playerId: localPlayer.id, row, col });
       return;
     }
 
@@ -151,13 +168,6 @@ export function GameScreen({
       : { type: 'pause', playerId: localPlayer.id, at: Date.now() });
   };
 
-  const modeTitle = notesMode
-    ? lockedDigit ? `Заметки · закреплена ${lockedDigit}` : 'Режим заметок'
-    : lockedDigit ? `Закреплена цифра ${lockedDigit}` : 'Обычный ввод';
-  const modeDescription = notesMode
-    ? lockedDigit ? 'Проводи по пустым клеткам, чтобы быстро добавить этот кандидат.' : 'Цифры добавляются как маленькие кандидаты. Зажми цифру, чтобы закрепить её.'
-    : lockedDigit ? 'Тапай или проводи по пустым клеткам, чтобы быстро расставить цифру.' : 'Выбери клетку и цифру. Зажми цифру, чтобы включить быстрый ввод.';
-
   return (
     <main className={`game-shell ${notesMode ? 'notes-mode-active' : ''} ${lockedDigit ? 'locked-mode-active' : ''}`}>
       <Paper className="game-topbar" radius="xl" p={6} shadow="xs">
@@ -168,29 +178,39 @@ export function GameScreen({
           <Text size="xs" c="dimmed">{difficultyLabels[snapshot.difficulty]}</Text>
           <Text fw={750} className="timer">{formatDuration(elapsedMs(snapshot, now))}</Text>
         </Stack>
+        <ActionIcon
+          variant={paused ? 'filled' : 'subtle'}
+          color={paused ? 'indigo' : 'gray'}
+          size="lg"
+          radius="xl"
+          aria-label={paused ? 'Продолжить игру' : 'Поставить на паузу'}
+          onClick={togglePause}
+          disabled={Boolean(snapshot.completedAt)}
+        >
+          {paused ? <IconPlayerPlay size={20} stroke={2} /> : <IconPlayerPause size={20} stroke={2} />}
+        </ActionIcon>
         <ActionIcon variant="subtle" color="gray" size="lg" radius="xl" aria-label="Открыть правила" onClick={() => setRulesOpen(true)}>
           <IconHelpCircle size={20} stroke={2} />
         </ActionIcon>
       </Paper>
 
-      <Group className="score-strip" justify="center" gap="sm" wrap="nowrap">
-        <PlayerChip player={localPlayer} score={localScore?.score ?? 0} active />
-        {remotePlayer ? <PlayerChip player={remotePlayer} score={remoteScore?.score ?? 0} /> : <Badge variant="light" color="gray">Один игрок</Badge>}
+      <div className="game-meta-row">
+        <PlayerScore player={localPlayer} score={localScore?.score ?? 0} active />
+        {remotePlayer && <PlayerScore player={remotePlayer} score={remoteScore?.score ?? 0} />}
         {peerState && (
-          <Badge
-            variant="light"
-            color={peerState === 'connected' ? 'teal' : 'red'}
-            leftSection={peerState === 'connected' ? <IconWifi size={13} /> : <IconWifiOff size={13} />}
+          <span
+            className={`connection-status ${peerState === 'connected' ? 'connected' : 'disconnected'}`}
+            aria-label={peerState === 'connected' ? 'Соединение со вторым игроком активно' : 'Соединение со вторым игроком потеряно'}
             title={latency === null ? undefined : `${latency} мс`}
           >
-            {peerState === 'connected' ? 'На связи' : 'Нет связи'}
-          </Badge>
+            {peerState === 'connected' ? <IconWifi size={18} /> : <IconWifiOff size={18} />}
+          </span>
         )}
-      </Group>
+      </div>
 
       {peerState && peerState !== 'connected' && (
-        <Paper className="connection-warning" radius="lg" p="sm" withBorder>
-          <Text size="xs">Связь со вторым телефоном прервалась. Поле сохранено на этом устройстве; новые совместные ходы пока не синхронизируются.</Text>
+        <Paper className="connection-warning" radius="lg" p="xs" withBorder>
+          <Text size="xs">Связь со вторым телефоном прервалась. Поле сохранено на этом устройстве.</Text>
         </Paper>
       )}
 
@@ -211,21 +231,6 @@ export function GameScreen({
       </section>
 
       <section className="controls-section">
-        <Paper className="input-mode-card" radius="xl" p="sm" shadow="xs">
-          <Group justify="space-between" align="center" wrap="nowrap">
-            <Group gap="sm" wrap="nowrap">
-              <ThemeIcon variant={notesMode || lockedDigit ? 'light' : 'default'} color="indigo" radius="xl" size="lg">
-                {notesMode ? <IconPencil size={18} stroke={2.2} /> : lockedDigit ? <IconLock size={18} stroke={2.2} /> : <IconPencil size={18} stroke={1.8} />}
-              </ThemeIcon>
-              <Stack gap={1} className="mode-copy">
-                <Text size="sm" fw={700}>{modeTitle}</Text>
-                <Text size="xs" c="dimmed">{modeDescription}</Text>
-              </Stack>
-            </Group>
-            {lockedDigit && <Badge color="indigo" variant="filled" size="lg" circle>{lockedDigit}</Badge>}
-          </Group>
-        </Paper>
-
         <NumberPad
           remaining={remaining}
           notesMode={notesMode}
@@ -237,27 +242,18 @@ export function GameScreen({
           onLockDigit={setLockedDigit}
         />
 
-        <Group grow mt="sm" gap="sm">
-          <Button
+        <Group justify="center" mt="xs" gap="xl" className="secondary-tools">
+          <ActionIcon
             variant="light"
             color="yellow"
             radius="xl"
-            leftSection={<IconBulb size={18} stroke={2} />}
+            size={52}
             onClick={askHint}
             disabled={paused || Boolean(snapshot.completedAt)}
+            aria-label="Показать подсказку"
           >
-            Подсказка
-          </Button>
-          <Button
-            variant="light"
-            color="gray"
-            radius="xl"
-            leftSection={paused ? <IconPlayerPlay size={18} stroke={2} /> : <IconPlayerPause size={18} stroke={2} />}
-            onClick={togglePause}
-            disabled={Boolean(snapshot.completedAt)}
-          >
-            {paused ? 'Продолжить' : 'Пауза'}
-          </Button>
+            <IconBulb size={24} stroke={2} />
+          </ActionIcon>
         </Group>
       </section>
 
@@ -310,16 +306,16 @@ export function GameScreen({
   );
 }
 
-function PlayerChip({ player, score, active = false }: { player: Player; score: number; active?: boolean }) {
+function PlayerScore({ player, score, active = false }: { player: Player; score: number; active?: boolean }) {
   return (
-    <Paper className={`player-chip ${player.color} ${active ? 'active' : ''}`} radius="xl" shadow="xs">
-      <Avatar size={32} radius="xl" color={player.color === 'coral' ? 'orange' : 'indigo'} variant="light">
-        {player.name.slice(0, 1).toUpperCase()}
+    <Group gap={7} wrap="nowrap" className="player-score">
+      <Avatar size={28} radius="xl" color={player.color === 'coral' ? 'orange' : 'indigo'} variant="light">
+        {player.name.slice(0, 1)}
       </Avatar>
-      <span className="player-copy">
-        <small>{active ? 'Ты' : player.name}</small>
-        <strong>{score}</strong>
-      </span>
-    </Paper>
+      <Stack gap={0}>
+        <Text size="xs" c="dimmed">{active ? 'Ты' : player.name}</Text>
+        <Text size="sm" fw={750} className="score-value">{score}</Text>
+      </Stack>
+    </Group>
   );
 }
