@@ -19,7 +19,7 @@ const LEGACY_PREFIX = 'sudoku2';
 const BASE45 = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:';
 const MAX_SINGLE_QR_CHARS = 2850;
 
-type PackedSignal = {
+type PackedSignalV2 = {
   p: 2;
   k: 'o' | 'a';
   t: RTCSdpType;
@@ -28,6 +28,20 @@ type PackedSignal = {
   n?: string;
   c?: PlayerColor;
 };
+
+type PackedSignalV3 = {
+  p: 3;
+  k: 'o' | 'a';
+  u: string;
+  w: string;
+  f: string;
+  x: 'a' | 'c' | 'p';
+  c: string[];
+  q?: string;
+  z?: string;
+};
+
+type PackedSignal = PackedSignalV2 | PackedSignalV3;
 
 type PendingChunks = {
   codec: string;
@@ -124,43 +138,126 @@ async function decompress(codec: string, bytes: Uint8Array): Promise<string> {
   return new TextDecoder().decode(bytes);
 }
 
-function compactCandidate(line: string) {
-  const parts = line.split(/\s+/);
+function candidateToCompact(line: string) {
+  const raw = line.replace(/^a=candidate:/, '');
+  const parts = raw.split(/\s+/);
   const typeIndex = parts.indexOf('typ');
-  if (typeIndex < 0 || typeIndex + 1 >= parts.length) return line;
-
-  const result = parts.slice(0, typeIndex + 2);
+  if (typeIndex < 0 || typeIndex + 1 >= parts.length || parts.length < 6) return null;
   const tcpTypeIndex = parts.indexOf('tcptype');
-  if (tcpTypeIndex >= 0 && tcpTypeIndex + 1 < parts.length) {
-    result.push('tcptype', parts[tcpTypeIndex + 1]);
-  }
-  return result.join(' ');
+  const values = [parts[0], parts[1], parts[2], parts[3], parts[4], parts[5], parts[typeIndex + 1]];
+  if (tcpTypeIndex >= 0 && tcpTypeIndex + 1 < parts.length) values.push(parts[tcpTypeIndex + 1]);
+  return values.join(',');
 }
 
-function compactLocalSdp(sdp: string) {
+function compactToCandidate(value: string) {
+  const parts = value.split(',');
+  if (parts.length < 7) throw new Error('Некорректный ICE-кандидат');
+  const [foundation, component, protocol, priority, address, port, type, tcpType] = parts;
+  return `a=candidate:${foundation} ${component} ${protocol} ${priority} ${address} ${port} typ ${type}${tcpType ? ` tcptype ${tcpType}` : ''}`;
+}
+
+function lineValue(lines: string[], prefix: string) {
+  const line = lines.find((item) => item.startsWith(prefix));
+  return line?.slice(prefix.length) ?? '';
+}
+
+function setupToCode(value: string): PackedSignalV3['x'] {
+  if (value === 'active') return 'c';
+  if (value === 'passive') return 'p';
+  return 'a';
+}
+
+function codeToSetup(value: PackedSignalV3['x']) {
+  if (value === 'c') return 'active';
+  if (value === 'p') return 'passive';
+  return 'actpass';
+}
+
+function packCompact(payload: SignalPayload): PackedSignalV3 | null {
+  const sdp = payload.sdp.sdp;
+  if (!sdp) return null;
   const lines = sdp.split(/\r?\n/).filter(Boolean);
-  const compacted = lines
-    .filter((line) => line !== 'a=ice-options:trickle' && line !== 'a=extmap-allow-mixed' && !line.startsWith('a=msid-semantic:'))
-    .map((line) => line.startsWith('a=candidate:') ? compactCandidate(line) : line);
-  return `${compacted.join('\r\n')}\r\n`;
+  const ufrag = lineValue(lines, 'a=ice-ufrag:');
+  const pwd = lineValue(lines, 'a=ice-pwd:');
+  const fingerprint = lineValue(lines, 'a=fingerprint:');
+  const setup = lineValue(lines, 'a=setup:');
+  const candidates = lines
+    .filter((line) => line.startsWith('a=candidate:'))
+    .map(candidateToCompact)
+    .filter((candidate): candidate is string => Boolean(candidate));
+
+  if (!ufrag || !pwd || !fingerprint || !setup || candidates.length === 0) return null;
+
+  const packed: PackedSignalV3 = {
+    p: 3,
+    k: payload.kind === 'offer' ? 'o' : 'a',
+    u: ufrag,
+    w: pwd,
+    f: fingerprint.startsWith('sha-256 ') ? fingerprint.slice(8) : fingerprint,
+    x: setupToCode(setup),
+    c: candidates,
+  };
+  const sctpPort = lineValue(lines, 'a=sctp-port:');
+  const maxMessageSize = lineValue(lines, 'a=max-message-size:');
+  if (sctpPort && sctpPort !== '5000') packed.q = sctpPort;
+  if (maxMessageSize && maxMessageSize !== '262144') packed.z = maxMessageSize;
+  return packed;
 }
 
-function pack(payload: SignalPayload): PackedSignal {
+function packLegacy(payload: SignalPayload): PackedSignalV2 {
   const sdp = payload.sdp.sdp;
   const type = payload.sdp.type;
   if (!sdp || !type) throw new Error('Не удалось подготовить данные соединения');
-
-  // Identity is exchanged again over the data channel in the hello message.
-  // Keeping it out of the QR makes the local code substantially less dense.
   return {
     p: 2,
     k: payload.kind === 'offer' ? 'o' : 'a',
     t: type,
-    s: compactLocalSdp(sdp),
+    s: sdp,
+    i: payload.sender.id,
+    n: payload.sender.name,
+    c: payload.sender.color,
   };
 }
 
+function restoreCompactSdp(value: PackedSignalV3) {
+  if (!value.u || !value.w || !value.f || !value.x || !Array.isArray(value.c) || value.c.length === 0) {
+    throw new Error('Некорректный QR соединения');
+  }
+  const fingerprint = value.f.includes(' ') ? value.f : `sha-256 ${value.f}`;
+  const candidates = value.c.map(compactToCandidate);
+  return [
+    'v=0',
+    'o=- 0 0 IN IP4 127.0.0.1',
+    's=-',
+    't=0 0',
+    'a=group:BUNDLE 0',
+    'm=application 9 UDP/DTLS/SCTP webrtc-datachannel',
+    'c=IN IP4 0.0.0.0',
+    `a=ice-ufrag:${value.u}`,
+    `a=ice-pwd:${value.w}`,
+    `a=fingerprint:${fingerprint}`,
+    `a=setup:${codeToSetup(value.x)}`,
+    'a=mid:0',
+    `a=sctp-port:${value.q || '5000'}`,
+    `a=max-message-size:${value.z || '262144'}`,
+    ...candidates,
+    'a=end-of-candidates',
+    '',
+  ].join('\r\n');
+}
+
 function unpack(value: PackedSignal): SignalPayload {
+  if (value.p === 3) {
+    if (value.k !== 'o' && value.k !== 'a') throw new Error('Некорректный QR соединения');
+    return {
+      protocol: 2,
+      kind: value.k === 'o' ? 'offer' : 'answer',
+      sdp: { type: value.k === 'o' ? 'offer' : 'answer', sdp: restoreCompactSdp(value) },
+      sender: { id: 'pending-peer', name: 'Игрок' },
+      networkMode: 'local',
+    };
+  }
+
   if (value.p !== 2 || (value.k !== 'o' && value.k !== 'a') || !value.t || !value.s) {
     throw new Error('Некорректный QR соединения');
   }
@@ -174,7 +271,8 @@ function unpack(value: PackedSignal): SignalPayload {
 }
 
 export async function signalToFrames(payload: SignalPayload): Promise<string[]> {
-  const packed = await compress(JSON.stringify(pack(payload)));
+  const packedValue: PackedSignal = packCompact(payload) ?? packLegacy(payload);
+  const packed = await compress(JSON.stringify(packedValue));
   const codec = packed.codec === 'g' ? 'G' : 'R';
   const encoded = bytesToBase45(packed.data);
   const single = `S2${codec}${encoded}`;
