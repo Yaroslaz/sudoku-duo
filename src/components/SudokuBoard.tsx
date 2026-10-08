@@ -1,6 +1,8 @@
 import { memo, useRef, type PointerEvent as ReactPointerEvent } from 'react';
 import type { Board, Coordinate, Digit, Hint, NotesGrid } from '../game/types';
 
+type PaintMode = 'add' | 'erase';
+
 export const SudokuBoard = memo(function SudokuBoard({
   puzzle,
   board,
@@ -24,9 +26,10 @@ export const SudokuBoard = memo(function SudokuBoard({
   notesMode: boolean;
   lockedDigit: Digit | null;
   onSelect: (row: number, col: number) => void;
-  onPaintCell: (row: number, col: number) => void;
+  onPaintCell: (row: number, col: number, mode: PaintMode) => void;
 }) {
   const painting = useRef(false);
+  const paintMode = useRef<PaintMode>('add');
   const paintedCells = useRef(new Set<string>());
   const selectedValue = lockedDigit ?? (selected ? board[selected.row][selected.col] : 0);
 
@@ -40,17 +43,36 @@ export const SudokuBoard = memo(function SudokuBoard({
 
   const hintRelated = new Set(hint?.related.map((cell) => `${cell.row}:${cell.col}`) ?? []);
 
+  const shouldAffectCell = (row: number, col: number) => {
+    if (!lockedDigit || puzzle[row][col] !== 0) return false;
+
+    if (notesMode) {
+      if (board[row][col] !== 0) return false;
+      const hasNote = notes[row][col].includes(lockedDigit);
+      return paintMode.current === 'erase' ? hasNote : !hasNote;
+    }
+
+    return paintMode.current === 'erase'
+      ? board[row][col] === lockedDigit
+      : board[row][col] === 0;
+  };
+
   const paintCell = (row: number, col: number) => {
     if (!lockedDigit || puzzle[row][col] !== 0) return;
     const key = `${row}:${col}`;
     if (paintedCells.current.has(key)) return;
     paintedCells.current.add(key);
     onSelect(row, col);
-    onPaintCell(row, col);
+    if (shouldAffectCell(row, col)) onPaintCell(row, col, paintMode.current);
   };
 
   const beginPaint = (row: number, col: number, event: ReactPointerEvent<HTMLButtonElement>) => {
     if (!lockedDigit || puzzle[row][col] !== 0) return;
+
+    paintMode.current = notesMode
+      ? notes[row][col].includes(lockedDigit) ? 'erase' : 'add'
+      : board[row][col] === lockedDigit ? 'erase' : 'add';
+
     event.preventDefault();
     painting.current = true;
     paintedCells.current.clear();
