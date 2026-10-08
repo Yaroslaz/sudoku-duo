@@ -1,7 +1,7 @@
 import { ActionIcon, Group, Stack } from '@mantine/core';
 import { IconBulb, IconEraser, IconPencil } from '@tabler/icons-react';
-import { useRef } from 'react';
-import { digitsForSize } from '../game/engine';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { digitsForSize, symbolForDigit } from '../game/engine';
 import type { BoardSize, Digit } from '../game/types';
 
 const LONG_PRESS_MS = 360;
@@ -25,6 +25,22 @@ export function NumberPad({ size, notesMode, eraserMode, hintActive, disabled, r
   const heldDigit = useRef<Digit | null>(null);
   const longPressFired = useRef(false);
   const holdStart = useRef<{ x: number; y: number } | null>(null);
+  const previousRemaining = useRef<Record<number, number>>({ ...remaining });
+  const [burst, setBurst] = useState<{ digit: Digit; id: number } | null>(null);
+
+  const digits = useMemo(() => digitsForSize(size), [size]);
+  const visibleDigits = digits.filter((digit) => (remaining[digit] ?? 0) > 0);
+
+  useEffect(() => {
+    const completed = digits.find((digit) => (previousRemaining.current[digit] ?? 0) > 0 && (remaining[digit] ?? 0) <= 0);
+    if (completed) {
+      setBurst({ digit: completed, id: Date.now() });
+      window.setTimeout(() => setBurst((current) => current?.digit === completed ? null : current), 650);
+      if (lockedDigit === completed) onLockDigit(null);
+      if ('vibrate' in navigator) navigator.vibrate?.([18, 28, 18]);
+    }
+    previousRemaining.current = { ...remaining };
+  }, [digits, lockedDigit, onLockDigit, remaining]);
 
   const clearHold = () => {
     if (holdTimer.current !== null) {
@@ -70,18 +86,18 @@ export function NumberPad({ size, notesMode, eraserMode, hintActive, disabled, r
         <ActionIcon variant="subtle" color={hintActive ? 'yellow' : 'gray'} radius="md" size={52} onClick={onHint} disabled={disabled} aria-pressed={hintActive} aria-label="Показать подсказку" className="reference-tool pressable-control"><IconBulb size={30} stroke={1.75} /></ActionIcon>
       </Group>
 
-      <div className="number-strip" role="group" aria-label="Цифры">
-        {digitsForSize(size).map((digit) => {
+      <div className={`number-strip ${size === 9 ? 'all-fit' : 'scrolling'}`} role="group" aria-label="Символы для ввода">
+        {visibleDigits.map((digit) => {
           const locked = lockedDigit === digit;
-          const unavailable = !notesMode && remaining[digit] <= 0;
+          const symbol = symbolForDigit(digit);
           return (
             <button
               key={digit}
               type="button"
               className={`number-button pressable-control ${locked ? 'locked' : ''} ${notesMode ? 'note-number' : ''}`}
-              disabled={disabled || (unavailable && !locked)}
+              disabled={disabled}
               aria-pressed={locked}
-              aria-label={locked ? `Цифра ${digit} закреплена. Удерживай, чтобы снять закрепление` : `Ввести ${digit}. Удерживай, чтобы закрепить`}
+              aria-label={locked ? `${symbol} закреплён. Удерживай, чтобы снять закрепление` : `Ввести ${symbol}. Удерживай, чтобы закрепить`}
               onPointerDown={(event) => startHold(digit, event.clientX, event.clientY)}
               onPointerMove={(event) => cancelIfMoved(event.clientX, event.clientY)}
               onPointerUp={clearHold}
@@ -90,10 +106,15 @@ export function NumberPad({ size, notesMode, eraserMode, hintActive, disabled, r
               onContextMenu={(event) => event.preventDefault()}
               onClick={() => handleDigitClick(digit)}
             >
-              <span className="number-glyph">{digit}</span>
+              <span className="number-glyph">{symbol}</span>
             </button>
           );
         })}
+        {burst && (
+          <span key={burst.id} className="completion-burst" aria-label={`${symbolForDigit(burst.digit)} заполнен полностью`}>
+            {Array.from({ length: 12 }, (_, index) => <i key={index} />)}
+          </span>
+        )}
       </div>
     </Stack>
   );
