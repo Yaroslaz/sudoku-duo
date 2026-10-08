@@ -12,7 +12,7 @@ import {
 } from '@mantine/core';
 import { IconArrowRight, IconBook2, IconPlayerPlay, IconUser, IconUsers } from '@tabler/icons-react';
 import { useState } from 'react';
-import { boardSizes, difficultyLabels } from '../game/engine';
+import { boardSizes, difficulties, difficultyLabels, regionDimensions } from '../game/engine';
 import type { BoardSize, Difficulty, GameSnapshot } from '../game/types';
 
 export function HomeScreen({
@@ -29,6 +29,7 @@ export function HomeScreen({
   onRules: () => void;
 }) {
   const [size, setSize] = useState<BoardSize>(9);
+  const region = regionDimensions(size);
 
   return (
     <Container size="sm" className="home-screen">
@@ -87,12 +88,13 @@ export function HomeScreen({
                   <Button key={value} variant={size === value ? 'light' : 'default'} color="indigo" radius="md" onClick={() => setSize(value)} aria-pressed={size === value}>{value}×{value}</Button>
                 ))}
               </SimpleGrid>
+              <Text size="xs" c="dimmed">Блоки {region.rows}×{region.cols}. После 9 на больших полях используются буквы A–I.</Text>
             </Stack>
 
             <Stack gap={7}>
               <Text size="sm" c="dimmed">Сложность</Text>
-              <SimpleGrid cols={{ base: 2, xs: 4 }} spacing="sm">
-                {(Object.keys(difficultyLabels) as Difficulty[]).map((difficulty) => (
+              <SimpleGrid cols={{ base: 2, xs: 3 }} spacing="sm">
+                {difficulties.map((difficulty) => (
                   <Button key={difficulty} variant="default" color="gray" radius="lg" size="md" onClick={() => onSolo(difficulty, size)} className="difficulty-button">{difficultyLabels[difficulty]}</Button>
                 ))}
               </SimpleGrid>
