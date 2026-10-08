@@ -25,6 +25,60 @@
 .player-color-button[aria-pressed='true'] > span { box-shadow: 0 0 0 3px #fff, 0 0 0 5px var(--swatch); }
 .player-color-button:focus-visible { outline: 2px solid #316ab1; outline-offset: 2px; }
 
+.pairing-screen .mantine-Alert-root:has(.tabler-icon-wifi),
+.pairing-screen .mantine-Alert-root:has(.tabler-icon-info-circle) {
+  background: rgba(255,255,255,.96) !important;
+  border: 1px solid #dfe3eb !important;
+  border-radius: 20px !important;
+  box-shadow: 0 6px 18px rgba(37,42,61,.045);
+  padding: 15px 16px !important;
+}
+
+.pairing-screen .mantine-Alert-root:has(.tabler-icon-wifi) .mantine-Alert-icon,
+.pairing-screen .mantine-Alert-root:has(.tabler-icon-info-circle) .mantine-Alert-icon {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  margin-right: 12px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #eef2ff;
+  color: #3f63d4;
+}
+
+.pairing-screen .mantine-Alert-root:has(.tabler-icon-info-circle) .mantine-Alert-icon {
+  background: #f2f4f7;
+  color: #5f6878;
+}
+
+.pairing-screen .mantine-Alert-root:has(.tabler-icon-wifi) .mantine-Alert-message,
+.pairing-screen .mantine-Alert-root:has(.tabler-icon-info-circle) .mantine-Alert-message {
+  color: #4f5767;
+  line-height: 1.45;
+}
+
+.pairing-screen .pair-choice-card {
+  height: 100%;
+  min-height: 190px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.pairing-screen .board-mode-card {
+  min-height: 146px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: flex-start;
+}
+
+.pairing-screen .board-mode-card > .board-mode-art {
+  align-self: center;
+  margin-bottom: auto;
+}
+
 .reference-game .sudoku-cell.selected-local {
   background: color-mix(in srgb, var(--local-color, #3174b8) 38%, white);
   color: var(--local-color, #3174b8);
