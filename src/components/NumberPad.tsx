@@ -1,5 +1,5 @@
-import { ActionIcon, Group, Stack } from '@mantine/core';
-import { IconBulb, IconEraser, IconPencil } from '@tabler/icons-react';
+import { ActionIcon, Group, Stack, Text } from '@mantine/core';
+import { IconArrowBackUp, IconArrowForwardUp, IconBulb, IconEraser, IconPencil } from '@tabler/icons-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { digitsForSize, symbolForDigit } from '../game/engine';
 import type { BoardSize, Digit } from '../game/types';
@@ -7,7 +7,7 @@ import type { BoardSize, Digit } from '../game/types';
 const LONG_PRESS_MS = 360;
 const MOVE_CANCEL_PX = 8;
 
-export function NumberPad({ size, notesMode, eraserMode, hintActive, disabled, remaining, lockedDigit, activeDigit, onDigit, onToggleNotes, onToggleEraser, onEraseSelected, onHint, onLockDigit, onActiveDigit }: {
+export function NumberPad({ size, notesMode, eraserMode, hintActive, disabled, remaining, lockedDigit, activeDigit, canUndo, canRedo, onDigit, onToggleNotes, onToggleEraser, onEraseSelected, onHint, onLockDigit, onActiveDigit, onUndo, onRedo }: {
   size: BoardSize;
   notesMode: boolean;
   eraserMode: boolean;
@@ -16,6 +16,8 @@ export function NumberPad({ size, notesMode, eraserMode, hintActive, disabled, r
   remaining: Record<number, number>;
   lockedDigit: Digit | null;
   activeDigit: Digit | null;
+  canUndo: boolean;
+  canRedo: boolean;
   onDigit: (digit: Digit) => void;
   onToggleNotes: () => void;
   onToggleEraser: () => void;
@@ -23,6 +25,8 @@ export function NumberPad({ size, notesMode, eraserMode, hintActive, disabled, r
   onHint: () => void;
   onLockDigit: (digit: Digit | null) => void;
   onActiveDigit: (digit: Digit | null) => void;
+  onUndo: () => void;
+  onRedo: () => void;
 }) {
   const holdTimer = useRef<number | null>(null);
   const heldDigit = useRef<Digit | null>(null);
@@ -110,8 +114,6 @@ export function NumberPad({ size, notesMode, eraserMode, hintActive, disabled, r
       heldDigit.current = null;
       return;
     }
-    // While any symbol is locked, panel taps are only for visual highlighting.
-    // Input in locked mode happens exclusively by tapping/dragging on the board.
     if (lockedDigit !== null) return;
     onDigit(digit);
   };
@@ -182,6 +184,17 @@ export function NumberPad({ size, notesMode, eraserMode, hintActive, disabled, r
           </span>
         )}
       </div>
+
+      <Group justify="center" gap="xl" className="history-controls" role="group" aria-label="История ходов">
+        <button type="button" className="history-button pressable-control" onClick={onUndo} disabled={disabled || !canUndo} aria-label="Отменить последний ход">
+          <IconArrowBackUp size={23} stroke={1.8} />
+          <Text component="span" size="xs">Назад</Text>
+        </button>
+        <button type="button" className="history-button pressable-control" onClick={onRedo} disabled={disabled || !canRedo} aria-label="Вернуть отменённый ход">
+          <IconArrowForwardUp size={23} stroke={1.8} />
+          <Text component="span" size="xs">Вперёд</Text>
+        </button>
+      </Group>
     </Stack>
   );
 }
