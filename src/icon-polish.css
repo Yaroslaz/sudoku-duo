@@ -2,25 +2,36 @@
 .app-bg .mantine-ActionIcon-root {
   display: inline-grid !important;
   place-items: center !important;
+  align-items: center !important;
+  justify-content: center !important;
   flex: 0 0 auto;
-  line-height: 1;
+  line-height: 0 !important;
+  vertical-align: middle;
 }
 
 .app-bg .mantine-ThemeIcon-root > svg,
 .app-bg .mantine-ActionIcon-root > svg,
 .app-bg .mantine-Button-section > svg,
-.app-bg .mantine-Alert-icon > svg {
-  display: block;
-  flex: 0 0 auto;
+.app-bg .mantine-Alert-icon > svg,
+.app-bg button > svg,
+.app-bg [role='button'] > svg {
+  display: block !important;
+  flex: 0 0 auto !important;
   margin: 0 !important;
-  transform: none;
+  position: static !important;
+  inset: auto !important;
+  vertical-align: middle !important;
+  transform-box: fill-box;
+  transform-origin: center;
 }
 
 .app-bg .mantine-Button-section {
-  display: inline-grid;
-  place-items: center;
+  display: inline-grid !important;
+  place-items: center !important;
+  align-items: center !important;
+  justify-content: center !important;
   flex: 0 0 auto;
-  line-height: 1;
+  line-height: 0 !important;
 }
 
 .home-mode-copy .mantine-ThemeIcon-root,
@@ -40,6 +51,9 @@
 .reference-game .reference-tool {
   display: grid !important;
   place-items: center !important;
+  align-items: center !important;
+  justify-content: center !important;
+  line-height: 0 !important;
 }
 
 .reference-game .reference-header-action > svg,
@@ -52,6 +66,45 @@
   display: grid !important;
   place-items: center !important;
   align-self: center !important;
+  line-height: 0 !important;
+}
+
+.reference-game .history-controls {
+  align-items: center !important;
+}
+
+.reference-game .history-button {
+  min-width: 68px;
+  min-height: 50px;
+  padding: 5px 10px;
+  border: 0;
+  background: transparent;
+  border-radius: 14px;
+  display: inline-flex !important;
+  flex-direction: column;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 3px;
+  line-height: 1 !important;
+  text-align: center;
+}
+
+.reference-game .history-button > svg {
+  display: block !important;
+  margin: 0 auto !important;
+  flex: 0 0 auto !important;
+  align-self: center !important;
+}
+
+.reference-game .history-button > span {
+  display: block;
+  line-height: 1.1;
+  margin: 0;
+}
+
+.reference-game .number-button.completed {
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .qr-shell img {
