@@ -67,14 +67,10 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* A partner gets one calm outline only. Older global styles used an inset
-   shadow as well, which produced two different-colored borders. */
-.reference-game .sudoku-cell.selected-remote:not(.selected-local) {
+/* A partner gets one calm outline only. Older styles used an inset shadow as
+   a second partner border. Local selection is already visible via background. */
+.reference-game .sudoku-cell.selected-remote {
   box-shadow: none !important;
-}
-
-.reference-game .sudoku-cell.selected-local.selected-remote {
-  box-shadow: inset 0 0 0 2px rgba(49, 106, 177, .18) !important;
 }
 
 .reference-game .sudoku-cell.selected-local.wrong.selected-remote {
@@ -84,8 +80,8 @@
 .reference-game .sudoku-cell.selected-remote::after {
   inset: 1px !important;
   border-width: 2px !important;
-  border-color: color-mix(in srgb, var(--remote-color, #d79262) 62%, white) !important;
-  opacity: .88;
+  border-color: color-mix(in srgb, var(--remote-color, #c99a72) 58%, white) !important;
+  opacity: .82;
 }
 
 @media (max-width: 390px) {
