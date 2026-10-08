@@ -14,11 +14,24 @@ function click(selector: string) {
   return true;
 }
 
-function closeTopModal() {
+function handleTopModal() {
   const modal = document.querySelector<HTMLElement>('.mantine-Modal-root');
   if (!modal) return false;
-  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true }));
-  return true;
+
+  const homeButton = Array.from(modal.querySelectorAll<HTMLButtonElement>('button'))
+    .find((button) => button.textContent?.trim() === 'На главный экран');
+  if (homeButton) {
+    homeButton.click();
+    return true;
+  }
+
+  const closeButton = modal.querySelector<HTMLElement>('.mantine-Modal-close');
+  if (closeButton) {
+    closeButton.click();
+    return true;
+  }
+
+  return false;
 }
 
 export function installBackNavigation() {
@@ -39,8 +52,7 @@ export function installBackNavigation() {
 
     pushGuard();
 
-    if (closeTopModal()) return;
-
+    if (handleTopModal()) return;
     if (click('.solo-setup-view [aria-label="Назад"]')) return;
     if (click('.records-screen .records-back')) return;
     if (click('.pairing-screen [aria-label="Назад"]')) return;
