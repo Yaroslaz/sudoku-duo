@@ -6,11 +6,327 @@
 }
 
 .sudoku-cell:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid #2f69b0;
   outline-offset: -3px;
   z-index: 5;
 }
 
 .sudoku-board.paint-mode .sudoku-cell.editable {
   cursor: crosshair;
+}
+
+.reference-game {
+  width: 100%;
+  max-width: 720px;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+  margin: 0 auto;
+  padding: max(8px, var(--safe-top)) 8px max(8px, var(--safe-bottom));
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+}
+
+.reference-header {
+  flex: 0 0 54px;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  padding-inline: 2px;
+}
+
+.reference-header > :last-child {
+  justify-self: end;
+}
+
+.reference-progress {
+  font-size: 1.45rem;
+  line-height: 1;
+  color: #34465d;
+  font-variant-numeric: tabular-nums;
+}
+
+.reference-connection {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  color: #316ab1;
+}
+
+.reference-connection.disconnected {
+  color: #c44f62;
+}
+
+.reference-stats {
+  flex: 0 0 72px;
+  display: grid;
+  grid-template-columns: 1.05fr 1.15fr .85fr 1.25fr;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px 6px;
+}
+
+.reference-stat {
+  min-width: 0;
+}
+
+.reference-stat-label {
+  color: #8a8f9d;
+  font-size: clamp(.72rem, 3.3vw, .9rem);
+  font-weight: 600;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+.reference-stat-value {
+  margin-top: 4px;
+  color: #7a8090;
+  font-size: clamp(.92rem, 4vw, 1.14rem);
+  font-weight: 500;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reference-time-stat {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+}
+
+.reference-pause {
+  flex: 0 0 42px;
+  background: #f0f2f6 !important;
+  color: #8a909f !important;
+}
+
+.reference-connection-warning {
+  flex: 0 0 auto;
+  margin: 0 8px 4px;
+  color: #b44557;
+  font-size: .75rem;
+  text-align: center;
+}
+
+.reference-game .board-section {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 0;
+}
+
+.reference-game .sudoku-board {
+  width: min(calc(100vw - 16px), 680px, calc(100dvh - 260px));
+  max-width: 100%;
+  aspect-ratio: 1;
+  border: 2px solid #4d5058;
+  border-radius: 0;
+  overflow: hidden;
+  background: #c8d0da;
+  box-shadow: none;
+  transform: none;
+}
+
+.reference-game .sudoku-cell {
+  border-right: 1px solid #c6ced8;
+  border-bottom: 1px solid #c6ced8;
+  background: #fff;
+  color: #316bb5;
+  font-size: clamp(1.35rem, 6vw, 2.5rem);
+  font-weight: 500;
+}
+
+.reference-game .sudoku-cell.given {
+  color: #111;
+  font-weight: 500;
+  background: #fff;
+}
+
+.reference-game .sudoku-cell.box-right {
+  border-right: 2px solid #4d5058;
+}
+
+.reference-game .sudoku-cell.box-bottom {
+  border-bottom: 2px solid #4d5058;
+}
+
+.reference-game .sudoku-cell.related {
+  background: #e7eef6;
+}
+
+.reference-game .sudoku-cell.same-value {
+  background: #d7e4f1;
+  color: #275f9f;
+}
+
+.reference-game .sudoku-cell.selected-local {
+  background: #acd8f4;
+  color: #185d9f;
+  box-shadow: none;
+  z-index: 2;
+}
+
+.reference-game .sudoku-cell.selected-remote {
+  box-shadow: inset 0 0 0 2px #e28a70;
+}
+
+.reference-game .sudoku-cell.wrong {
+  color: #cf4458;
+  background: #fff0f2;
+}
+
+.reference-game .sudoku-cell.hint-related {
+  background: #fff9df;
+}
+
+.reference-game .sudoku-cell.hint-target {
+  background: #ffeca3;
+  box-shadow: inset 0 0 0 2px #d3a92f;
+}
+
+.reference-game.notes-mode-active .sudoku-board {
+  border-color: #416fa7;
+  box-shadow: inset 0 -3px 0 #416fa7;
+}
+
+.reference-game.locked-mode-active .sudoku-board {
+  outline: 2px solid rgba(49, 106, 177, .16);
+  outline-offset: 2px;
+}
+
+.reference-game .notes-grid {
+  inset: 2px;
+  color: #426b9e;
+  font-size: clamp(.45rem, 2vw, .78rem);
+  font-weight: 500;
+}
+
+.reference-game .controls-section {
+  flex: 0 0 auto;
+  width: min(calc(100vw - 16px), 680px);
+  max-width: 100%;
+  margin: 0 auto;
+  padding: 8px 0 2px;
+}
+
+.reference-game .number-pad-wrap {
+  gap: 8px !important;
+}
+
+.reference-game .tool-row {
+  min-height: 50px;
+  padding-inline: 10%;
+}
+
+.reference-game .reference-tool {
+  color: #7d8492;
+  background: transparent;
+}
+
+.reference-game .mode-button[data-pressed='true'],
+.reference-game .mode-button[aria-pressed='true'] {
+  color: #316ab1;
+  background: #eaf1f9;
+}
+
+.reference-game .number-pad {
+  width: 100%;
+}
+
+.reference-game .number-button {
+  height: clamp(50px, 7dvh, 66px) !important;
+  min-width: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: #316ab1 !important;
+  appearance: none;
+  -webkit-touch-callout: none;
+  user-select: none;
+}
+
+.reference-game .number-button:not(:disabled):active {
+  transform: scale(.96);
+}
+
+.reference-game .number-button:focus-visible {
+  outline: 2px solid #316ab1;
+  outline-offset: -4px;
+}
+
+.reference-game .number-glyph {
+  display: inline-grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  font-size: clamp(2rem, 9vw, 3.55rem);
+  line-height: 1;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  transition-property: transform, font-size, background-color, color;
+  transition-duration: 150ms;
+  transition-timing-function: ease-out;
+}
+
+.reference-game .number-button.locked .number-glyph {
+  width: clamp(38px, 11vw, 52px);
+  height: clamp(38px, 11vw, 52px);
+  margin: auto;
+  border-radius: 50%;
+  background: #316ab1;
+  color: #fff;
+  font-size: clamp(1.55rem, 7vw, 2.45rem);
+}
+
+.reference-game .number-button.note-number .number-glyph {
+  transform: scale(.72) translateY(-2px);
+  transform-origin: center;
+}
+
+.reference-game .number-button:disabled {
+  opacity: .25;
+}
+
+@media (max-height: 720px) {
+  .reference-header {
+    flex-basis: 46px;
+  }
+
+  .reference-stats {
+    flex-basis: 62px;
+    padding-bottom: 2px;
+  }
+
+  .reference-game .sudoku-board {
+    width: min(calc(100vw - 16px), 680px, calc(100dvh - 224px));
+  }
+
+  .reference-game .controls-section {
+    padding-top: 4px;
+  }
+
+  .reference-game .tool-row {
+    min-height: 44px;
+  }
+
+  .reference-game .number-button {
+    height: 46px !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reference-game .number-button,
+  .reference-game .number-glyph {
+    transition-duration: .01ms !important;
+  }
 }
