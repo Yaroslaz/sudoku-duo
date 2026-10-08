@@ -28,7 +28,7 @@ export const SudokuBoard = memo(function SudokuBoard({
 }) {
   const painting = useRef(false);
   const paintedCells = useRef(new Set<string>());
-  const selectedValue = selected ? board[selected.row][selected.col] : 0;
+  const selectedValue = lockedDigit ?? (selected ? board[selected.row][selected.col] : 0);
 
   const relatedToSelection = (row: number, col: number) => {
     if (!selected) return false;
