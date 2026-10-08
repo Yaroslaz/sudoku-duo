@@ -1,0 +1,258 @@
+.home-hero {
+  overflow: hidden;
+}
+
+.home-hero-layout {
+  display: grid;
+  gap: 18px;
+  align-items: center;
+}
+
+.home-hero-copy {
+  min-width: 0;
+}
+
+.home-title {
+  max-width: none;
+  margin: 0;
+  font-size: clamp(2rem, 8vw, 3.25rem);
+  line-height: 1;
+  letter-spacing: -0.035em;
+  text-wrap: balance;
+}
+
+.home-hero-text {
+  max-width: 30rem;
+  line-height: 1.45;
+  text-wrap: pretty;
+}
+
+.duo-illustration {
+  position: relative;
+  min-height: 158px;
+  display: grid;
+  place-items: center;
+  isolation: isolate;
+}
+
+.duo-illustration::before {
+  content: '';
+  position: absolute;
+  width: 152px;
+  height: 152px;
+  border-radius: 50%;
+  background: #f1f4ff;
+  z-index: -2;
+}
+
+.duo-board-art {
+  width: 132px;
+  height: 132px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: repeat(4, 1fr);
+  background: #fff;
+  border: 2px solid #687083;
+  box-shadow: 0 12px 30px rgba(42, 48, 67, .10);
+  transform: rotate(-2deg);
+}
+
+.duo-cell {
+  display: grid;
+  place-items: center;
+  border-right: 1px solid #d5d9e2;
+  border-bottom: 1px solid #d5d9e2;
+  color: #272c3b;
+  font-size: 15px;
+  font-weight: 750;
+  line-height: 1;
+}
+
+.duo-cell:nth-child(4n) { border-right: 0; }
+.duo-cell:nth-last-child(-n + 4) { border-bottom: 0; }
+.duo-cell:nth-child(2),
+.duo-cell:nth-child(6),
+.duo-cell:nth-child(10),
+.duo-cell:nth-child(14) { border-right-width: 2px; border-right-color: #7e8798; }
+.duo-cell:nth-child(n + 5):nth-child(-n + 8) { border-bottom-width: 2px; border-bottom-color: #7e8798; }
+
+.duo-cell-blue {
+  background: #dce5ff;
+  color: #315cc9;
+  box-shadow: inset 0 0 0 2px #4c6ef5;
+}
+
+.duo-cell-orange {
+  background: #fff3ed;
+  color: #c86535;
+  box-shadow: inset 0 0 0 2px #ef8c5b;
+}
+
+.duo-player {
+  position: absolute;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: #fff;
+  border: 2px solid currentColor;
+  box-shadow: 0 8px 22px rgba(42, 48, 67, .10);
+  z-index: 3;
+}
+
+.duo-player-left {
+  left: max(4px, calc(50% - 112px));
+  top: 26px;
+  color: #4c6ef5;
+}
+
+.duo-player-right {
+  right: max(4px, calc(50% - 112px));
+  bottom: 22px;
+  color: #e37a49;
+}
+
+.duo-line {
+  position: absolute;
+  height: 2px;
+  width: 42px;
+  background: #cbd2df;
+  z-index: -1;
+}
+
+.duo-line-left {
+  left: calc(50% - 91px);
+  top: 56px;
+  transform: rotate(24deg);
+}
+
+.duo-line-right {
+  right: calc(50% - 91px);
+  bottom: 52px;
+  transform: rotate(24deg);
+}
+
+.board-size-grid {
+  min-width: 0;
+}
+
+.board-size-button {
+  min-width: 0 !important;
+  width: 100%;
+  padding-inline: 4px !important;
+  font-size: clamp(.9rem, 3.7vw, 1.05rem) !important;
+  font-variant-numeric: tabular-nums;
+}
+
+.board-size-button .mantine-Button-inner,
+.board-size-button .mantine-Button-label {
+  min-width: 0;
+  width: 100%;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: nowrap;
+  justify-content: center;
+}
+
+@media (max-width: 420px) {
+  .home-hero {
+    padding: 20px !important;
+  }
+
+  .duo-illustration {
+    min-height: 140px;
+    order: -1;
+  }
+
+  .duo-illustration::before {
+    width: 136px;
+    height: 136px;
+  }
+
+  .duo-board-art {
+    width: 118px;
+    height: 118px;
+  }
+
+  .duo-player {
+    width: 38px;
+    height: 38px;
+  }
+
+  .duo-player-left {
+    left: calc(50% - 100px);
+    top: 20px;
+  }
+
+  .duo-player-right {
+    right: calc(50% - 100px);
+    bottom: 16px;
+  }
+
+  .duo-line-left {
+    left: calc(50% - 81px);
+    top: 49px;
+  }
+
+  .duo-line-right {
+    right: calc(50% - 81px);
+    bottom: 43px;
+  }
+
+  .home-title {
+    font-size: clamp(1.95rem, 9vw, 2.65rem);
+  }
+
+  .board-size-button {
+    height: 46px;
+    padding-inline: 2px !important;
+    font-size: clamp(.82rem, 3.5vw, .98rem) !important;
+  }
+}
+
+@media (min-width: 600px) {
+  .home-hero-layout {
+    grid-template-columns: minmax(0, 1fr) 220px;
+    gap: 26px;
+  }
+
+  .home-hero-copy .primary-action {
+    align-self: flex-start;
+    min-width: 220px;
+  }
+
+  .duo-illustration {
+    min-height: 190px;
+  }
+
+  .duo-board-art {
+    width: 150px;
+    height: 150px;
+  }
+
+  .duo-illustration::before {
+    width: 176px;
+    height: 176px;
+  }
+
+  .duo-player-left {
+    left: 2px;
+    top: 26px;
+  }
+
+  .duo-player-right {
+    right: 2px;
+    bottom: 26px;
+  }
+
+  .duo-line-left {
+    left: 34px;
+    top: 58px;
+  }
+
+  .duo-line-right {
+    right: 34px;
+    bottom: 55px;
+  }
+}
