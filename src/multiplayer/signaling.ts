@@ -167,8 +167,6 @@ export async function signalToFrames(payload: SignalPayload): Promise<string[]> 
   const encoded = bytesToBase45(packed.data);
   const single = `S2${codec}${encoded}`;
 
-  // Short signals remain a single QR. Dense signals are split so each QR has
-  // fewer modules and therefore much larger squares on the same phone screen.
   if (single.length <= QR_CHUNK_SIZE + 16) return [single];
 
   const total = Math.ceil(encoded.length / QR_CHUNK_SIZE);
@@ -192,7 +190,9 @@ export class FrameAssembler {
   private pending = new Map<string, PendingChunks>();
 
   async add(raw: string): Promise<{ payload: SignalPayload | null; progress: FrameProgress | null }> {
-    const value = raw.trim();
+    // Base45 legitimately uses the space character. Strip only line breaks
+    // around a manually pasted frame; trim() would corrupt valid payloads.
+    const value = raw.replace(/^[\r\n]+|[\r\n]+$/g, '');
     try {
       if (value.startsWith('S2C') && value.length > 12) {
         const codec = value[3].toLowerCase();
@@ -209,7 +209,7 @@ export class FrameAssembler {
           this.pending.set(id, entry);
         }
         entry.chunks[index] = chunk;
-        const received = entry.chunks.filter(Boolean).length;
+        const received = entry.chunks.filter((part) => part !== undefined).length;
         if (received < total) {
           return { payload: null, progress: { sessionId: id, received, total } };
         }
@@ -249,7 +249,7 @@ export function signalToCopyCode(frames: string[]): string {
 
 export async function copyCodeToSignal(code: string): Promise<SignalPayload> {
   const assembler = new FrameAssembler();
-  const parts = code.split(/\s+/).map((part) => part.trim()).filter(Boolean);
+  const parts = code.split(/\r?\n/).filter((part) => part.length > 0);
   for (const part of parts) {
     const result = await assembler.add(part);
     if (result.payload) return result.payload;
