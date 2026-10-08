@@ -22,4 +22,31 @@ describe('local QR signaling', () => {
     const result = await new FrameAssembler().add(frames[0]);
     expect(result.payload).toEqual(payload);
   });
+
+  it('splits dense signaling into easier QR parts and assembles them in any order', async () => {
+    let state = 0x12345678;
+    const noisy = Array.from({ length: 7000 }, () => {
+      state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+      return String.fromCharCode(33 + (state % 90));
+    }).join('');
+    const payload: SignalPayload = {
+      protocol: 2,
+      kind: 'answer',
+      sdp: { type: 'answer', sdp: `v=0\r\na=x-test:${noisy}\r\n` },
+      sender: { id: 'device-dense', name: 'Друг', color: 'teal' },
+      networkMode: 'local',
+    };
+
+    const frames = await signalToFrames(payload);
+    expect(frames.length).toBeGreaterThan(1);
+    expect(frames.every((frame) => frame.length < 850)).toBe(true);
+
+    const assembler = new FrameAssembler();
+    let restored: SignalPayload | null = null;
+    for (const frame of [...frames].reverse()) {
+      const result = await assembler.add(frame);
+      if (result.payload) restored = result.payload;
+    }
+    expect(restored).toEqual(payload);
+  });
 });
