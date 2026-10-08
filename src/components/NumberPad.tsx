@@ -5,21 +5,9 @@ import { digitsForSize } from '../game/engine';
 import type { BoardSize, Digit } from '../game/types';
 
 const LONG_PRESS_MS = 360;
+const MOVE_CANCEL_PX = 8;
 
-export function NumberPad({
-  size,
-  notesMode,
-  eraserMode,
-  hintActive,
-  disabled,
-  remaining,
-  lockedDigit,
-  onDigit,
-  onToggleNotes,
-  onToggleEraser,
-  onHint,
-  onLockDigit,
-}: {
+export function NumberPad({ size, notesMode, eraserMode, hintActive, disabled, remaining, lockedDigit, onDigit, onToggleNotes, onToggleEraser, onHint, onLockDigit }: {
   size: BoardSize;
   notesMode: boolean;
   eraserMode: boolean;
@@ -36,23 +24,33 @@ export function NumberPad({
   const holdTimer = useRef<number | null>(null);
   const heldDigit = useRef<Digit | null>(null);
   const longPressFired = useRef(false);
+  const holdStart = useRef<{ x: number; y: number } | null>(null);
 
   const clearHold = () => {
     if (holdTimer.current !== null) {
       window.clearTimeout(holdTimer.current);
       holdTimer.current = null;
     }
+    holdStart.current = null;
   };
 
-  const startHold = (digit: Digit) => {
+  const startHold = (digit: Digit, x: number, y: number) => {
     clearHold();
     heldDigit.current = digit;
     longPressFired.current = false;
+    holdStart.current = { x, y };
     holdTimer.current = window.setTimeout(() => {
       longPressFired.current = true;
       onLockDigit(lockedDigit === digit ? null : digit);
       if ('vibrate' in navigator) navigator.vibrate?.(18);
     }, LONG_PRESS_MS);
+  };
+
+  const cancelIfMoved = (x: number, y: number) => {
+    if (!holdStart.current) return;
+    const dx = x - holdStart.current.x;
+    const dy = y - holdStart.current.y;
+    if (Math.hypot(dx, dy) > MOVE_CANCEL_PX) clearHold();
   };
 
   const handleDigitClick = (digit: Digit) => {
@@ -67,45 +65,9 @@ export function NumberPad({
   return (
     <Stack gap={10} className={`number-pad-wrap ${notesMode ? 'notes-active' : ''}`}>
       <Group justify="space-around" gap={0} className="tool-row">
-        <ActionIcon
-          variant="subtle"
-          color={eraserMode ? 'indigo' : 'gray'}
-          radius="md"
-          size={52}
-          onClick={onToggleEraser}
-          disabled={disabled}
-          aria-pressed={eraserMode}
-          aria-label={eraserMode ? 'Выключить ластик' : 'Включить ластик'}
-          className="reference-tool pressable-control"
-        >
-          <IconEraser size={30} stroke={1.75} />
-        </ActionIcon>
-        <ActionIcon
-          variant="subtle"
-          color={notesMode ? 'indigo' : 'gray'}
-          radius="md"
-          size={52}
-          className="reference-tool pressable-control"
-          onClick={onToggleNotes}
-          disabled={disabled}
-          aria-pressed={notesMode}
-          aria-label={notesMode ? 'Выключить заметки' : 'Включить заметки'}
-        >
-          <IconPencil size={29} stroke={1.75} />
-        </ActionIcon>
-        <ActionIcon
-          variant="subtle"
-          color={hintActive ? 'yellow' : 'gray'}
-          radius="md"
-          size={52}
-          onClick={onHint}
-          disabled={disabled}
-          aria-pressed={hintActive}
-          aria-label="Показать подсказку"
-          className="reference-tool pressable-control"
-        >
-          <IconBulb size={30} stroke={1.75} />
-        </ActionIcon>
+        <ActionIcon variant="subtle" color={eraserMode ? 'indigo' : 'gray'} radius="md" size={52} onClick={onToggleEraser} disabled={disabled} aria-pressed={eraserMode} aria-label={eraserMode ? 'Выключить ластик' : 'Включить ластик'} className="reference-tool pressable-control"><IconEraser size={30} stroke={1.75} /></ActionIcon>
+        <ActionIcon variant="subtle" color={notesMode ? 'indigo' : 'gray'} radius="md" size={52} className="reference-tool pressable-control" onClick={onToggleNotes} disabled={disabled} aria-pressed={notesMode} aria-label={notesMode ? 'Выключить заметки' : 'Включить заметки'}><IconPencil size={29} stroke={1.75} /></ActionIcon>
+        <ActionIcon variant="subtle" color={hintActive ? 'yellow' : 'gray'} radius="md" size={52} onClick={onHint} disabled={disabled} aria-pressed={hintActive} aria-label="Показать подсказку" className="reference-tool pressable-control"><IconBulb size={30} stroke={1.75} /></ActionIcon>
       </Group>
 
       <div className="number-strip" role="group" aria-label="Цифры">
@@ -120,12 +82,11 @@ export function NumberPad({
               disabled={disabled || (unavailable && !locked)}
               aria-pressed={locked}
               aria-label={locked ? `Цифра ${digit} закреплена. Удерживай, чтобы снять закрепление` : `Ввести ${digit}. Удерживай, чтобы закрепить`}
-              onPointerDown={(event) => {
-                event.currentTarget.setPointerCapture?.(event.pointerId);
-                startHold(digit);
-              }}
+              onPointerDown={(event) => startHold(digit, event.clientX, event.clientY)}
+              onPointerMove={(event) => cancelIfMoved(event.clientX, event.clientY)}
               onPointerUp={clearHold}
               onPointerCancel={clearHold}
+              onPointerLeave={clearHold}
               onContextMenu={(event) => event.preventDefault()}
               onClick={() => handleDigitClick(digit)}
             >
