@@ -1,3 +1,4 @@
+import { normalizePlayerColor } from './playerColors';
 import { sanitizeSnapshot } from './session';
 import type { GameSnapshot, PlayerColor } from './types';
 
@@ -5,7 +6,7 @@ const GAME_KEY = 'sudoku-duo:game:v1';
 const NAME_KEY = 'sudoku-duo:name:v1';
 const COLOR_KEY = 'sudoku-duo:color:v1';
 const DEVICE_KEY = 'sudoku-duo:device:v1';
-const COLORS: PlayerColor[] = ['blue', 'orange', 'green', 'purple', 'pink', 'teal'];
+const COLORS: PlayerColor[] = ['blue', 'orange', 'green', 'purple', 'teal'];
 
 export function saveGame(snapshot: GameSnapshot) {
   try { localStorage.setItem(GAME_KEY, JSON.stringify(snapshot)); } catch { /* noop */ }
@@ -34,15 +35,18 @@ export function saveName(name: string) {
 
 export function getSavedColor(): PlayerColor {
   try {
-    const color = localStorage.getItem(COLOR_KEY) as PlayerColor | null;
-    return color && COLORS.includes(color) ? color : 'blue';
+    const raw = localStorage.getItem(COLOR_KEY) as PlayerColor | null;
+    const color = raw ? normalizePlayerColor(raw) : 'blue';
+    if (!COLORS.includes(color)) return 'blue';
+    if (raw !== color) localStorage.setItem(COLOR_KEY, color);
+    return color;
   } catch {
     return 'blue';
   }
 }
 
 export function saveColor(color: PlayerColor) {
-  try { localStorage.setItem(COLOR_KEY, color); } catch { /* noop */ }
+  try { localStorage.setItem(COLOR_KEY, normalizePlayerColor(color)); } catch { /* noop */ }
 }
 
 export function getDeviceId() {
