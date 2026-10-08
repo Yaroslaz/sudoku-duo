@@ -1,7 +1,6 @@
 import {
   ActionIcon,
   Alert,
-  Badge,
   Button,
   Container,
   CopyButton,
@@ -155,11 +154,7 @@ export function PairingScreen({
           <ActionIcon variant="default" radius="xl" size="lg" aria-label="Назад" onClick={goBack}>
             <IconArrowLeft size={19} />
           </ActionIcon>
-          {peerState !== 'idle' && (
-            <Badge variant="light" color={peerState === 'connected' ? 'teal' : peerState === 'failed' ? 'red' : 'indigo'}>
-              {stateLabel(peerState)}
-            </Badge>
-          )}
+          {peerState !== 'idle' && <Text size="xs" c="dimmed">{stateLabel(peerState)}</Text>}
         </Group>
 
         {phase === 'choice' && (
