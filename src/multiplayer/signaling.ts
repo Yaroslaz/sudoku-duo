@@ -17,15 +17,15 @@ export type SignalPayload = {
 
 const LEGACY_PREFIX = 'sudoku2';
 const BASE45 = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:';
-const QR_CHUNK_SIZE = 820;
+const MAX_SINGLE_QR_CHARS = 2850;
 
 type PackedSignal = {
   p: 2;
   k: 'o' | 'a';
   t: RTCSdpType;
   s: string;
-  i: string;
-  n: string;
+  i?: string;
+  n?: string;
   c?: PlayerColor;
 };
 
@@ -124,41 +124,53 @@ async function decompress(codec: string, bytes: Uint8Array): Promise<string> {
   return new TextDecoder().decode(bytes);
 }
 
+function compactCandidate(line: string) {
+  const parts = line.split(/\s+/);
+  const typeIndex = parts.indexOf('typ');
+  if (typeIndex < 0 || typeIndex + 1 >= parts.length) return line;
+
+  const result = parts.slice(0, typeIndex + 2);
+  const tcpTypeIndex = parts.indexOf('tcptype');
+  if (tcpTypeIndex >= 0 && tcpTypeIndex + 1 < parts.length) {
+    result.push('tcptype', parts[tcpTypeIndex + 1]);
+  }
+  return result.join(' ');
+}
+
+function compactLocalSdp(sdp: string) {
+  const lines = sdp.split(/\r?\n/).filter(Boolean);
+  const compacted = lines
+    .filter((line) => line !== 'a=ice-options:trickle' && line !== 'a=extmap-allow-mixed' && !line.startsWith('a=msid-semantic:'))
+    .map((line) => line.startsWith('a=candidate:') ? compactCandidate(line) : line);
+  return `${compacted.join('\r\n')}\r\n`;
+}
+
 function pack(payload: SignalPayload): PackedSignal {
   const sdp = payload.sdp.sdp;
   const type = payload.sdp.type;
   if (!sdp || !type) throw new Error('Не удалось подготовить данные соединения');
+
+  // Identity is exchanged again over the data channel in the hello message.
+  // Keeping it out of the QR makes the local code substantially less dense.
   return {
     p: 2,
     k: payload.kind === 'offer' ? 'o' : 'a',
     t: type,
-    s: sdp,
-    i: payload.sender.id,
-    n: payload.sender.name,
-    c: payload.sender.color,
+    s: compactLocalSdp(sdp),
   };
 }
 
 function unpack(value: PackedSignal): SignalPayload {
-  if (value.p !== 2 || (value.k !== 'o' && value.k !== 'a') || !value.t || !value.s || !value.i) {
+  if (value.p !== 2 || (value.k !== 'o' && value.k !== 'a') || !value.t || !value.s) {
     throw new Error('Некорректный QR соединения');
   }
   return {
     protocol: 2,
     kind: value.k === 'o' ? 'offer' : 'answer',
     sdp: { type: value.t, sdp: value.s },
-    sender: { id: value.i, name: value.n || 'Игрок', color: value.c },
+    sender: { id: value.i || 'pending-peer', name: value.n || 'Игрок', color: value.c },
     networkMode: 'local',
   };
-}
-
-function shortFrameId(value: string) {
-  let hash = 2166136261;
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-  return (hash >>> 0).toString(36).toUpperCase().padStart(6, '0').slice(-6);
 }
 
 export async function signalToFrames(payload: SignalPayload): Promise<string[]> {
@@ -167,17 +179,11 @@ export async function signalToFrames(payload: SignalPayload): Promise<string[]> 
   const encoded = bytesToBase45(packed.data);
   const single = `S2${codec}${encoded}`;
 
-  if (single.length <= QR_CHUNK_SIZE + 16) return [single];
+  if (single.length > MAX_SINGLE_QR_CHARS) {
+    throw new Error('Данные локального соединения получились слишком большими для одного надёжного QR. Пересоздай соединение или используй резервный код.');
+  }
 
-  const total = Math.ceil(encoded.length / QR_CHUNK_SIZE);
-  if (total > 35) throw new Error('Данные соединения слишком большие для QR. Используй резервный код.');
-  const id = shortFrameId(encoded);
-  const totalChar = total.toString(36).toUpperCase();
-  return Array.from({ length: total }, (_, index) => {
-    const chunk = encoded.slice(index * QR_CHUNK_SIZE, (index + 1) * QR_CHUNK_SIZE);
-    const indexChar = index.toString(36).toUpperCase();
-    return `S2C${codec}${id}${indexChar}${totalChar}${chunk}`;
-  });
+  return [single];
 }
 
 export type FrameProgress = {
@@ -194,6 +200,7 @@ export class FrameAssembler {
     // around a manually pasted frame; trim() would corrupt valid payloads.
     const value = raw.replace(/^[\r\n]+|[\r\n]+$/g, '');
     try {
+      // Backward compatibility with the temporary multi-QR format.
       if (value.startsWith('S2C') && value.length > 12) {
         const codec = value[3].toLowerCase();
         const id = value.slice(4, 10);
