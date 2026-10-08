@@ -1,19 +1,20 @@
 import { Alert, Button, Paper, Stack, Text, Textarea } from '@mantine/core';
 import { BrowserQRCodeReader, type IScannerControls } from '@zxing/browser';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { copyCodeToSignal, FrameAssembler, type SignalPayload } from '../multiplayer/signaling';
+import { copyCodeToSignal, FrameAssembler, type FrameProgress, type SignalPayload } from '../multiplayer/signaling';
 
 export function QrScanner({ onSignal, expectedKind }: { onSignal: (signal: SignalPayload) => void; expectedKind: 'offer' | 'answer' }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const controlsRef = useRef<IScannerControls | null>(null);
   const assembler = useMemo(() => new FrameAssembler(), []);
   const [error, setError] = useState('');
+  const [progress, setProgress] = useState<FrameProgress | null>(null);
   const [manualOpen, setManualOpen] = useState(false);
   const [manual, setManual] = useState('');
 
   useEffect(() => {
     let stopped = false;
-    const reader = new BrowserQRCodeReader(undefined, { delayBetweenScanAttempts: 100, delayBetweenScanSuccess: 300 });
+    const reader = new BrowserQRCodeReader(undefined, { delayBetweenScanAttempts: 90, delayBetweenScanSuccess: 240 });
 
     const start = async () => {
       try {
@@ -24,10 +25,13 @@ export function QrScanner({ onSignal, expectedKind }: { onSignal: (signal: Signa
             if (!result || stopped) return;
             try {
               const assembled = await assembler.add(result.getText());
-              if (!assembled.payload) {
+              if (!assembled.progress) {
                 setError('Это не QR соединения Sudoku duo');
                 return;
               }
+              setError('');
+              setProgress(assembled.progress);
+              if (!assembled.payload) return;
               if (assembled.payload.kind !== expectedKind) throw new Error('Это QR другого шага подключения');
               controlsRef.current?.stop();
               onSignal(assembled.payload);
@@ -69,6 +73,9 @@ export function QrScanner({ onSignal, expectedKind }: { onSignal: (signal: Signa
         <div className="scanner-frame" aria-hidden="true" />
       </Paper>
 
+      {progress && progress.total > 1 && progress.received < progress.total && (
+        <Alert color="blue" radius="lg">Считано {progress.received} из {progress.total}. Держи камеру на экране — следующий QR появится сам.</Alert>
+      )}
       {error && <Alert color="red" radius="lg">{error}</Alert>}
 
       <Button variant="subtle" radius="xl" onClick={() => setManualOpen((value) => !value)}>
@@ -77,7 +84,7 @@ export function QrScanner({ onSignal, expectedKind }: { onSignal: (signal: Signa
 
       {manualOpen && (
         <Stack gap="xs">
-          <Text size="sm" c="dimmed">На другом телефоне нажми «Скопировать резервный код» и передай его любым локальным способом.</Text>
+          <Text size="sm" c="dimmed">На другом телефоне нажми «Скопировать резервный код» или «Поделиться» и передай его любым способом.</Text>
           <Textarea value={manual} onChange={(event) => setManual(event.currentTarget.value)} minRows={3} autosize placeholder="Вставь резервный код" />
           <Button radius="xl" onClick={() => void applyManual()} disabled={!manual.trim()}>Применить код</Button>
         </Stack>
