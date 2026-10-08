@@ -4,11 +4,12 @@ import { GameScreen } from './components/GameScreen';
 import { HomeScreen } from './components/HomeScreen';
 import { PairingScreen, type PairingResult } from './components/PairingScreen';
 import { RulesModal } from './components/RulesModal';
+import { cloneBoard, cloneNotes } from './game/engine';
 import { recordFinishedGame, rememberPartner } from './game/records';
 import { applyGameAction, createGame, type GameAction } from './game/session';
 import { getDeviceId, getSavedColor, getSavedName, loadGame, saveColor, saveGame, saveName } from './game/storage';
-import type { BoardSize, Coordinate, Difficulty, GameSnapshot, MistakeLimit, Player, PlayerColor } from './game/types';
-import { PeerSession, type PeerRole, type PeerState } from './multiplayer/peer';
+import type { Board, BoardSize, Coordinate, Difficulty, GameSnapshot, MistakeLimit, NotesGrid, Player, PlayerColor } from './game/types';
+import type { GamePeerSession, PeerRole, PeerState } from './multiplayer/peer';
 import type { WireMessage } from './multiplayer/protocol';
 
 const theme = createTheme({
@@ -21,6 +22,7 @@ const theme = createTheme({
 
 type Screen = 'home' | 'pairing' | 'game';
 type RemoteCursor = { cell: Coordinate | null; notesMode: boolean } | null;
+type HistoryFrame = { board: Board; notes: NotesGrid };
 
 export default function App() {
   const deviceId = useMemo(() => getDeviceId(), []);
@@ -38,16 +40,52 @@ export default function App() {
   const [remoteCursor, setRemoteCursor] = useState<RemoteCursor>(null);
   const [reconnectMode, setReconnectMode] = useState(false);
 
-  const peerRef = useRef<PeerSession | null>(null);
+  const peerRef = useRef<GamePeerSession | null>(null);
   const snapshotRef = useRef<GameSnapshot | null>(null);
   const roleRef = useRef<PeerRole | 'solo'>('solo');
   const playersRef = useRef<Player[]>([]);
   const localPlayerRef = useRef<Player>(localPlayer);
+  const undoRef = useRef<HistoryFrame[]>([]);
+  const redoRef = useRef<HistoryFrame[]>([]);
   const messageHandlerRef = useRef<(message: WireMessage) => void>(() => undefined);
 
   const setSnapshot = (next: GameSnapshot | null) => {
     snapshotRef.current = next;
     setSnapshotState(next);
+  };
+
+  const resetHistory = () => {
+    undoRef.current = [];
+    redoRef.current = [];
+  };
+
+  const captureHistory = (game: GameSnapshot): HistoryFrame => ({
+    board: cloneBoard(game.board),
+    notes: cloneNotes(game.notes),
+  });
+
+  const pushUndo = (game: GameSnapshot) => {
+    undoRef.current.push(captureHistory(game));
+    if (undoRef.current.length > 100) undoRef.current.shift();
+    redoRef.current = [];
+  };
+
+  const historyStep = (kind: 'undo' | 'redo'): GameSnapshot | null => {
+    const current = snapshotRef.current;
+    if (!current || current.completedAt || current.failedAt || current.pausedAt !== null) return null;
+    const source = kind === 'undo' ? undoRef : redoRef;
+    const target = kind === 'undo' ? redoRef : undoRef;
+    const frame = source.current.pop();
+    if (!frame) return null;
+    target.current.push(captureHistory(current));
+    const next: GameSnapshot = {
+      ...current,
+      board: cloneBoard(frame.board),
+      notes: cloneNotes(frame.notes),
+      lastSeq: current.lastSeq + 1,
+    };
+    setSnapshot(next);
+    return next;
   };
 
   useEffect(() => { roleRef.current = role; }, [role]);
@@ -76,8 +114,17 @@ export default function App() {
   const hostApply = (action: GameAction, requestId: string) => {
     const current = snapshotRef.current;
     if (!current) return;
+
+    if (action.type === 'undo' || action.type === 'redo') {
+      const next = historyStep(action.type);
+      if (next) peerRef.current?.send({ type: 'canonical-action', action, snapshot: next, requestId });
+      return;
+    }
+
     const canonicalAction: GameAction = action.type === 'pause' || action.type === 'resume' ? { ...action, at: Date.now() } : action;
     const result = applyGameAction(current, canonicalAction);
+    if (!result.accepted) return;
+    if (canonicalAction.type === 'set' || canonicalAction.type === 'clear' || canonicalAction.type === 'note') pushUndo(current);
     setSnapshot(result.snapshot);
     peerRef.current?.send({ type: 'canonical-action', action: canonicalAction, snapshot: result.snapshot, requestId });
   };
@@ -119,6 +166,7 @@ export default function App() {
   const startSolo = (difficulty: Difficulty, size: BoardSize, mistakeLimit: MistakeLimit) => {
     peerRef.current?.close();
     peerRef.current = null;
+    resetHistory();
     setPeerState(null);
     setLatency(null);
     setRemoteCursor(null);
@@ -138,6 +186,7 @@ export default function App() {
     if (!game || game.failedAt) return;
     peerRef.current?.close();
     peerRef.current = null;
+    resetHistory();
     const player: Player = { id: deviceId, name: savedName || 'Ты', color: savedColor };
     const knownIds = Object.keys(game.scores);
     const restoredPlayers: Player[] = knownIds.map((id, index) => id === deviceId
@@ -155,7 +204,7 @@ export default function App() {
     setScreen('game');
   };
 
-  const attachSessionCallbacks = (session: PeerSession, sessionRole: PeerRole) => {
+  const attachSessionCallbacks = (session: GamePeerSession, sessionRole: PeerRole) => {
     session.setCallbacks({
       onState: (state) => {
         setPeerState(state);
@@ -194,6 +243,7 @@ export default function App() {
       return;
     }
 
+    resetHistory();
     if (result.role === 'host') {
       const game = createGame(result.difficulty ?? 'medium', nextPlayers.map((player) => player.id), result.size ?? 9, result.mistakeLimit);
       setSnapshot(game);
@@ -209,7 +259,14 @@ export default function App() {
     if (roleRef.current === 'solo') {
       const current = snapshotRef.current;
       if (!current) return;
-      setSnapshot(applyGameAction(current, action).snapshot);
+      if (action.type === 'undo' || action.type === 'redo') {
+        historyStep(action.type);
+        return;
+      }
+      const result = applyGameAction(current, action);
+      if (!result.accepted) return;
+      if (action.type === 'set' || action.type === 'clear' || action.type === 'note') pushUndo(current);
+      setSnapshot(result.snapshot);
       return;
     }
     const requestId = crypto.randomUUID();
@@ -221,6 +278,17 @@ export default function App() {
     if (roleRef.current === 'solo') return;
     peerRef.current?.send({ type: 'cursor', playerId: localPlayerRef.current.id, cell, notesMode });
   };
+
+  useEffect(() => {
+    const undo = () => submitAction({ type: 'undo', playerId: localPlayerRef.current.id });
+    const redo = () => submitAction({ type: 'redo', playerId: localPlayerRef.current.id });
+    window.addEventListener('sudoku-duo:undo', undo);
+    window.addEventListener('sudoku-duo:redo', redo);
+    return () => {
+      window.removeEventListener('sudoku-duo:undo', undo);
+      window.removeEventListener('sudoku-duo:redo', redo);
+    };
+  });
 
   const reconnect = () => {
     pauseForConnectionLoss();
@@ -241,6 +309,7 @@ export default function App() {
     setRemoteCursor(null);
     setReconnectMode(false);
     setSnapshot(null);
+    resetHistory();
     setScreen('home');
     setSavedGame(loadGame());
   };
