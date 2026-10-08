@@ -1,10 +1,23 @@
 .adaptive-menu-chevron {
+  flex: 0 0 auto !important;
+  width: 20px;
+  height: 20px;
+  margin: 0 !important;
+  position: static !important;
+  inset: auto !important;
+  align-self: center;
+  translate: none !important;
   transition: transform 180ms ease;
   transform-origin: 50% 50%;
 }
 
 .adaptive-menu-chevron.opened {
   transform: rotate(180deg);
+}
+
+.difficulty-menu-target > span:first-child {
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 .adaptive-menu-dropdown {
@@ -42,6 +55,27 @@
   letter-spacing: .2em;
   padding-left: calc(var(--input-padding-inline-start) + .2em);
   font-variant-numeric: tabular-nums;
+}
+
+/* A partner gets one calm outline only. Older global styles used an inset
+   shadow as well, which produced two different-colored borders. */
+.reference-game .sudoku-cell.selected-remote:not(.selected-local) {
+  box-shadow: none !important;
+}
+
+.reference-game .sudoku-cell.selected-local.selected-remote {
+  box-shadow: inset 0 0 0 2px rgba(49, 106, 177, .18) !important;
+}
+
+.reference-game .sudoku-cell.selected-local.wrong.selected-remote {
+  box-shadow: inset 0 0 0 2px rgba(201, 47, 70, .58) !important;
+}
+
+.reference-game .sudoku-cell.selected-remote::after {
+  inset: 1px !important;
+  border-width: 2px !important;
+  border-color: color-mix(in srgb, var(--remote-color, #d79262) 62%, white) !important;
+  opacity: .88;
 }
 
 @media (max-width: 390px) {
