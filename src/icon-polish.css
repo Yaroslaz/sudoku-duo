@@ -1,0 +1,59 @@
+.app-bg .mantine-ThemeIcon-root,
+.app-bg .mantine-ActionIcon-root {
+  display: inline-grid !important;
+  place-items: center !important;
+  flex: 0 0 auto;
+  line-height: 1;
+}
+
+.app-bg .mantine-ThemeIcon-root > svg,
+.app-bg .mantine-ActionIcon-root > svg,
+.app-bg .mantine-Button-section > svg,
+.app-bg .mantine-Alert-icon > svg {
+  display: block;
+  flex: 0 0 auto;
+  margin: 0 !important;
+  transform: none;
+}
+
+.app-bg .mantine-Button-section {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  line-height: 1;
+}
+
+.home-mode-copy .mantine-ThemeIcon-root,
+.continue-card .mantine-ThemeIcon-root,
+.pair-choice-card > .mantine-ThemeIcon-root,
+.records-screen .mantine-ThemeIcon-root {
+  align-self: center;
+  justify-self: center;
+}
+
+.pairing-screen .pair-choice-card > .mantine-ThemeIcon-root {
+  align-self: flex-start;
+  margin: 0 !important;
+}
+
+.reference-game .reference-header-action,
+.reference-game .reference-tool {
+  display: grid !important;
+  place-items: center !important;
+}
+
+.reference-game .reference-header-action > svg,
+.reference-game .reference-tool > svg {
+  position: static !important;
+  margin: 0 !important;
+}
+
+.pairing-screen .mantine-Alert-icon {
+  display: grid !important;
+  place-items: center !important;
+  align-self: center !important;
+}
+
+.qr-shell img {
+  display: block;
+}
