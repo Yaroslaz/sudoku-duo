@@ -36,7 +36,7 @@ export const SudokuBoard = memo(function SudokuBoard({
   const gesture = useRef<'digit' | 'eraser' | null>(null);
   const paintMode = useRef<PaintMode>('add');
   const paintedCells = useRef(new Set<string>());
-  const selectedValue = lockedDigit ?? (selected ? board[selected.row][selected.col] : 0);
+  const selectedValue = eraserMode ? 0 : lockedDigit ?? (selected ? board[selected.row][selected.col] : 0);
 
   const relatedToSelection = (row: number, col: number) => {
     if (!selected) return false;
@@ -86,7 +86,7 @@ export const SudokuBoard = memo(function SudokuBoard({
     event.preventDefault();
     painting.current = true;
     paintedCells.current.clear();
-    event.currentTarget.setPointerCapture?.(event.pointerId);
+    event.currentTarget.parentElement?.setPointerCapture?.(event.pointerId);
 
     if (eraserMode) {
       gesture.current = 'eraser';
@@ -150,7 +150,6 @@ export const SudokuBoard = memo(function SudokuBoard({
       onPointerMove={movePaint}
       onPointerUp={endPaint}
       onPointerCancel={endPaint}
-      onPointerLeave={endPaint}
     >
       {board.map((row, r) => row.map((value, c) => {
         const isGiven = puzzle[r][c] !== 0;
