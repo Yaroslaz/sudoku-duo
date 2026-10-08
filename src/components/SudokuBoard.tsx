@@ -50,6 +50,14 @@ export const SudokuBoard = memo(function SudokuBoard({
   const noteColumns = Math.ceil(Math.sqrt(size));
   const noteRows = Math.ceil(size / noteColumns);
   const hintRelated = useMemo(() => new Set(hint?.related.map((cell) => `${cell.row}:${cell.col}`) ?? []), [hint]);
+  const selectedRegion = selected ? regionId(size, selected.row, selected.col) : null;
+  const showSelectionPeers = Boolean(
+    selected
+      && board[selected.row]?.[selected.col] === 0
+      && !hint
+      && !lockedDigit
+      && !eraserMode,
+  );
 
   const teaching = useMemo(() => {
     const blocked = new Set<string>();
@@ -180,13 +188,20 @@ export const SudokuBoard = memo(function SudokuBoard({
         const isSameValue = Boolean(highlightDigit && value === highlightDigit);
         const isWrong = Boolean(value && !isGiven && solution[r][c] !== value);
         const isHintCell = hint?.cell.row === r && hint?.cell.col === c;
-        const key = `${r}:${c}`;
         const currentRegion = regionId(size, r, c);
+        const isSelectionPeer = Boolean(
+          showSelectionPeers
+            && selected
+            && !isSelected
+            && (r === selected.row || c === selected.col || currentRegion === selectedRegion),
+        );
+        const key = `${r}:${c}`;
         const regionRight = c < size - 1 && regionId(size, r, c + 1) !== currentRegion;
         const regionBottom = r < size - 1 && regionId(size, r + 1, c) !== currentRegion;
         const classNames = [
           'sudoku-cell',
           isGiven ? 'given' : 'editable',
+          isSelectionPeer ? 'selection-peer' : '',
           isSameValue ? 'same-value' : '',
           isSelected ? 'selected-local' : '',
           isRemote ? 'selected-remote' : '',
