@@ -12,7 +12,7 @@ async function main() {
   }).join('');
   const candidate = `a=x-test:${noisy}\r\n`;
   const signal: SignalPayload = {
-    protocol: 1,
+    protocol: 2,
     kind: 'offer',
     sdp: { type: 'offer', sdp: `v=0\r\no=- 1 2 IN IP4 127.0.0.1\r\n${candidate}` },
     sender: { id: 'device-a', name: 'Ярослав' },
@@ -21,7 +21,7 @@ async function main() {
 
   const frames = await signalToFrames(signal);
   assert(frames.length > 1, 'large signal must be split into multiple QR frames');
-  assert(frames.every((frame) => frame.length < 1200), 'each QR frame must stay comfortably below the QR payload limit');
+  assert(frames.every((frame) => frame.length < 850), 'each QR frame must stay low-density');
 
   const assembler = new FrameAssembler();
   const order = frames.map((_, index) => index).reverse();
