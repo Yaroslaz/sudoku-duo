@@ -21,7 +21,7 @@ export function useQrFrames(frames: string[], intervalMs = 1650) {
       return;
     }
     QRCode.toDataURL(frame, {
-      width: 520,
+      width: 440,
       margin: 2,
       errorCorrectionLevel: 'L',
       color: { dark: '#10131a', light: '#ffffff' },
