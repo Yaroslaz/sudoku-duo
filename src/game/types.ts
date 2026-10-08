@@ -3,6 +3,8 @@ export type CellValue = Digit | 0;
 export type Board = CellValue[][];
 export type NotesGrid = Digit[][][];
 export type Difficulty = 'easy' | 'medium' | 'hard' | 'expert';
+export type BoardSize = 4 | 5 | 6 | 9;
+export type PlayerColor = 'blue' | 'orange' | 'green' | 'purple' | 'pink' | 'teal';
 
 export type Coordinate = {
   row: number;
@@ -12,7 +14,7 @@ export type Coordinate = {
 export type Player = {
   id: string;
   name: string;
-  color: 'violet' | 'coral';
+  color: PlayerColor;
 };
 
 export type PlayerScore = {
@@ -26,6 +28,7 @@ export type PlayerScore = {
 export type GameSnapshot = {
   version: 1;
   id: string;
+  size: BoardSize;
   difficulty: Difficulty;
   puzzle: Board;
   solution: Board;
