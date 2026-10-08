@@ -1,7 +1,15 @@
 import { createRng, hashString, shuffle } from './random';
-import type { Board, CellValue, Coordinate, Difficulty, Digit, Hint, NotesGrid } from './types';
+import type { Board, BoardSize, CellValue, Coordinate, Difficulty, Digit, Hint, NotesGrid } from './types';
 
-const DIGITS: Digit[] = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+const ALL_DIGITS: Digit[] = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+
+export const boardSizes: BoardSize[] = [4, 5, 6, 9];
+export const boardSizeLabels: Record<BoardSize, string> = {
+  4: '4×4',
+  5: '5×5',
+  6: '6×6',
+  9: '9×9',
+};
 
 export const difficultyLabels: Record<Difficulty, string> = {
   easy: 'Легко',
@@ -10,19 +18,53 @@ export const difficultyLabels: Record<Difficulty, string> = {
   expert: 'Эксперт',
 };
 
-const targetClues: Record<Difficulty, number> = {
-  easy: 42,
-  medium: 36,
-  hard: 31,
-  expert: 27,
+const targetClues: Record<BoardSize, Record<Difficulty, number>> = {
+  4: { easy: 10, medium: 8, hard: 7, expert: 6 },
+  5: { easy: 16, medium: 14, hard: 12, expert: 11 },
+  6: { easy: 23, medium: 20, hard: 17, expert: 15 },
+  9: { easy: 42, medium: 36, hard: 31, expert: 27 },
 };
 
-export function emptyBoard(): Board {
-  return Array.from({ length: 9 }, () => Array<CellValue>(9).fill(0));
+const regions5: number[][] = [
+  [0, 0, 1, 1, 1],
+  [0, 0, 1, 2, 1],
+  [0, 3, 2, 2, 2],
+  [3, 3, 3, 2, 4],
+  [3, 4, 4, 4, 4],
+];
+
+export function digitsForSize(size: number): Digit[] {
+  return ALL_DIGITS.slice(0, size) as Digit[];
 }
 
-export function emptyNotes(): NotesGrid {
-  return Array.from({ length: 9 }, () => Array.from({ length: 9 }, () => [] as Digit[]));
+export function regionId(size: BoardSize, row: number, col: number): number {
+  if (size === 4) return Math.floor(row / 2) * 2 + Math.floor(col / 2);
+  if (size === 6) return Math.floor(row / 2) * 2 + Math.floor(col / 3);
+  if (size === 9) return Math.floor(row / 3) * 3 + Math.floor(col / 3);
+  return regions5[row]?.[col] ?? -1;
+}
+
+export function regionCells(size: BoardSize, row: number, col: number): Coordinate[] {
+  const id = regionId(size, row, col);
+  const output: Coordinate[] = [];
+  for (let r = 0; r < size; r += 1) {
+    for (let c = 0; c < size; c += 1) {
+      if (regionId(size, r, c) === id) output.push({ row: r, col: c });
+    }
+  }
+  return output;
+}
+
+export function regionName(size: BoardSize): string {
+  return size === 5 ? 'области' : size === 9 ? 'квадрате 3×3' : 'блоке';
+}
+
+export function emptyBoard(size: BoardSize = 9): Board {
+  return Array.from({ length: size }, () => Array<CellValue>(size).fill(0));
+}
+
+export function emptyNotes(size: BoardSize = 9): NotesGrid {
+  return Array.from({ length: size }, () => Array.from({ length: size }, () => [] as Digit[]));
 }
 
 export function cloneBoard(board: Board): Board {
@@ -33,21 +75,22 @@ export function cloneNotes(notes: NotesGrid): NotesGrid {
   return notes.map((row) => row.map((cell) => [...cell]));
 }
 
-export function isCoordinate(value: number): boolean {
-  return Number.isInteger(value) && value >= 0 && value < 9;
+export function isCoordinate(value: number, size = 9): boolean {
+  return Number.isInteger(value) && value >= 0 && value < size;
 }
 
 export function isValidPlacement(board: Board, row: number, col: number, digit: Digit): boolean {
-  for (let i = 0; i < 9; i += 1) {
+  const size = board.length as BoardSize;
+  if (!digitsForSize(size).includes(digit)) return false;
+  for (let i = 0; i < size; i += 1) {
     if (i !== col && board[row][i] === digit) return false;
     if (i !== row && board[i][col] === digit) return false;
   }
 
-  const boxRow = Math.floor(row / 3) * 3;
-  const boxCol = Math.floor(col / 3) * 3;
-  for (let r = boxRow; r < boxRow + 3; r += 1) {
-    for (let c = boxCol; c < boxCol + 3; c += 1) {
-      if ((r !== row || c !== col) && board[r][c] === digit) return false;
+  const id = regionId(size, row, col);
+  for (let r = 0; r < size; r += 1) {
+    for (let c = 0; c < size; c += 1) {
+      if ((r !== row || c !== col) && regionId(size, r, c) === id && board[r][c] === digit) return false;
     }
   }
   return true;
@@ -55,14 +98,15 @@ export function isValidPlacement(board: Board, row: number, col: number, digit: 
 
 export function candidates(board: Board, row: number, col: number): Digit[] {
   if (board[row][col] !== 0) return [];
-  return DIGITS.filter((digit) => isValidPlacement(board, row, col, digit));
+  return digitsForSize(board.length).filter((digit) => isValidPlacement(board, row, col, digit));
 }
 
 function findEmptyWithFewestCandidates(board: Board): Coordinate | null {
+  const size = board.length;
   let best: Coordinate | null = null;
-  let bestCount = 10;
-  for (let row = 0; row < 9; row += 1) {
-    for (let col = 0; col < 9; col += 1) {
+  let bestCount = size + 1;
+  for (let row = 0; row < size; row += 1) {
+    for (let col = 0; col < size; col += 1) {
       if (board[row][col] !== 0) continue;
       const count = candidates(board, row, col).length;
       if (count < bestCount) {
@@ -117,9 +161,9 @@ export function countSolutions(input: Board, limit = 2): number {
   return count;
 }
 
-function makeSolvedBoard(seed: string): Board {
-  const board = emptyBoard();
-  const rng = createRng(hashString(seed));
+function makeSolvedBoard(size: BoardSize, seed: string): Board {
+  const board = emptyBoard(size);
+  const rng = createRng(hashString(`${seed}:${size}`));
 
   function fill(): boolean {
     const cell = findEmptyWithFewestCandidates(board);
@@ -136,29 +180,27 @@ function makeSolvedBoard(seed: string): Board {
   return board;
 }
 
-export function generatePuzzle(difficulty: Difficulty, seed: string = crypto.randomUUID()) {
-  const solution = makeSolvedBoard(seed);
+export function generatePuzzle(difficulty: Difficulty, size: BoardSize = 9, seed: string = crypto.randomUUID()) {
+  const solution = makeSolvedBoard(size, seed);
   const puzzle = cloneBoard(solution);
-  const rng = createRng(hashString(`${seed}:${difficulty}`));
+  const rng = createRng(hashString(`${seed}:${difficulty}:${size}`));
+  const total = size * size;
   const cells = shuffle(
-    Array.from({ length: 81 }, (_, index) => ({ row: Math.floor(index / 9), col: index % 9 })),
+    Array.from({ length: total }, (_, index) => ({ row: Math.floor(index / size), col: index % size })),
     rng,
   );
-  const target = targetClues[difficulty];
-  let clues = 81;
+  const target = targetClues[size][difficulty];
+  let clues = total;
 
   for (const { row, col } of cells) {
     if (clues <= target) break;
     const previous = puzzle[row][col];
     puzzle[row][col] = 0;
-    if (countSolutions(puzzle, 2) !== 1) {
-      puzzle[row][col] = previous;
-    } else {
-      clues -= 1;
-    }
+    if (countSolutions(puzzle, 2) !== 1) puzzle[row][col] = previous;
+    else clues -= 1;
   }
 
-  return { puzzle, solution, seed, clues };
+  return { puzzle, solution, seed, clues, size };
 }
 
 export function boardIsComplete(board: Board): boolean {
@@ -166,26 +208,24 @@ export function boardIsComplete(board: Board): boolean {
 }
 
 export function boardMatchesSolution(board: Board, solution: Board): boolean {
-  return board.every((row, r) => row.every((value, c) => value === solution[r][c]));
+  return board.length === solution.length && board.every((row, r) => row.every((value, c) => value === solution[r][c]));
 }
 
 export function removePeerNotes(notes: NotesGrid, row: number, col: number, digit: Digit): NotesGrid {
   const next = cloneNotes(notes);
-  for (let i = 0; i < 9; i += 1) {
+  const size = next.length as BoardSize;
+  for (let i = 0; i < size; i += 1) {
     next[row][i] = next[row][i].filter((n) => n !== digit);
     next[i][col] = next[i][col].filter((n) => n !== digit);
   }
-  const boxRow = Math.floor(row / 3) * 3;
-  const boxCol = Math.floor(col / 3) * 3;
-  for (let r = boxRow; r < boxRow + 3; r += 1) {
-    for (let c = boxCol; c < boxCol + 3; c += 1) {
-      next[r][c] = next[r][c].filter((n) => n !== digit);
-    }
+  for (const cell of regionCells(size, row, col)) {
+    next[cell.row][cell.col] = next[cell.row][cell.col].filter((n) => n !== digit);
   }
   return next;
 }
 
-function relatedCells(row: number, col: number): Coordinate[] {
+function relatedCells(board: Board, row: number, col: number): Coordinate[] {
+  const size = board.length as BoardSize;
   const key = (r: number, c: number) => `${r}:${c}`;
   const seen = new Set<string>();
   const output: Coordinate[] = [];
@@ -197,26 +237,25 @@ function relatedCells(row: number, col: number): Coordinate[] {
       output.push({ row: r, col: c });
     }
   };
-  for (let i = 0; i < 9; i += 1) {
+  for (let i = 0; i < size; i += 1) {
     add(row, i);
     add(i, col);
   }
-  const br = Math.floor(row / 3) * 3;
-  const bc = Math.floor(col / 3) * 3;
-  for (let r = br; r < br + 3; r += 1) {
-    for (let c = bc; c < bc + 3; c += 1) add(r, c);
-  }
+  for (const cell of regionCells(size, row, col)) add(cell.row, cell.col);
   return output;
 }
 
 function eliminatedDigits(board: Board, row: number, col: number): Digit[] {
   const possible = new Set(candidates(board, row, col));
-  return DIGITS.filter((digit) => !possible.has(digit));
+  return digitsForSize(board.length).filter((digit) => !possible.has(digit));
 }
 
 export function findHint(board: Board): Hint | null {
-  for (let row = 0; row < 9; row += 1) {
-    for (let col = 0; col < 9; col += 1) {
+  const size = board.length as BoardSize;
+  const digits = digitsForSize(size);
+
+  for (let row = 0; row < size; row += 1) {
+    for (let col = 0; col < size; col += 1) {
       const options = candidates(board, row, col);
       if (options.length === 1) {
         const digit = options[0];
@@ -225,19 +264,18 @@ export function findHint(board: Board): Hint | null {
           cell: { row, col },
           digit,
           title: `Здесь подходит только ${digit}`,
-          explanation: 'Остальные цифры уже встречаются в этой строке, столбце или квадрате 3×3, поэтому остаётся единственный вариант.',
-          related: relatedCells(row, col),
+          explanation: `Остальные цифры уже встречаются в этой строке, столбце или ${regionName(size)}, поэтому остаётся единственный вариант.`,
+          related: relatedCells(board, row, col),
           eliminated: eliminatedDigits(board, row, col),
         };
       }
     }
   }
 
-  // Hidden single in rows
-  for (let row = 0; row < 9; row += 1) {
-    for (const digit of DIGITS) {
+  for (let row = 0; row < size; row += 1) {
+    for (const digit of digits) {
       const places: Coordinate[] = [];
-      for (let col = 0; col < 9; col += 1) {
+      for (let col = 0; col < size; col += 1) {
         if (board[row][col] === 0 && candidates(board, row, col).includes(digit)) places.push({ row, col });
       }
       if (places.length === 1) {
@@ -247,19 +285,18 @@ export function findHint(board: Board): Hint | null {
           cell,
           digit,
           title: `${digit} может стоять только здесь`,
-          explanation: `В этой строке для цифры ${digit} осталась только одна допустимая клетка. Даже если у клетки есть другие кандидаты, для самой цифры ${digit} другого места нет.`,
-          related: Array.from({ length: 9 }, (_, col) => ({ row, col })).filter((p) => p.col !== cell.col),
+          explanation: `В этой строке для цифры ${digit} осталась только одна допустимая клетка.`,
+          related: Array.from({ length: size }, (_, col) => ({ row, col })).filter((p) => p.col !== cell.col),
           eliminated: eliminatedDigits(board, cell.row, cell.col),
         };
       }
     }
   }
 
-  // Hidden single in columns
-  for (let col = 0; col < 9; col += 1) {
-    for (const digit of DIGITS) {
+  for (let col = 0; col < size; col += 1) {
+    for (const digit of digits) {
       const places: Coordinate[] = [];
-      for (let row = 0; row < 9; row += 1) {
+      for (let row = 0; row < size; row += 1) {
         if (board[row][col] === 0 && candidates(board, row, col).includes(digit)) places.push({ row, col });
       }
       if (places.length === 1) {
@@ -269,39 +306,32 @@ export function findHint(board: Board): Hint | null {
           cell,
           digit,
           title: `${digit} может стоять только здесь`,
-          explanation: `В этом столбце цифру ${digit} можно поставить только в одну клетку. Остальные позиции исключаются правилами строки и квадрата 3×3.`,
-          related: Array.from({ length: 9 }, (_, row) => ({ row, col })).filter((p) => p.row !== cell.row),
+          explanation: `В этом столбце цифру ${digit} можно поставить только в одну клетку.`,
+          related: Array.from({ length: size }, (_, row) => ({ row, col })).filter((p) => p.row !== cell.row),
           eliminated: eliminatedDigits(board, cell.row, cell.col),
         };
       }
     }
   }
 
-  // Hidden single in boxes
-  for (let boxRow = 0; boxRow < 3; boxRow += 1) {
-    for (let boxCol = 0; boxCol < 3; boxCol += 1) {
-      for (const digit of DIGITS) {
-        const places: Coordinate[] = [];
-        for (let r = boxRow * 3; r < boxRow * 3 + 3; r += 1) {
-          for (let c = boxCol * 3; c < boxCol * 3 + 3; c += 1) {
-            if (board[r][c] === 0 && candidates(board, r, c).includes(digit)) places.push({ row: r, col: c });
-          }
-        }
+  const visited = new Set<number>();
+  for (let row = 0; row < size; row += 1) {
+    for (let col = 0; col < size; col += 1) {
+      const id = regionId(size, row, col);
+      if (visited.has(id)) continue;
+      visited.add(id);
+      const cells = regionCells(size, row, col);
+      for (const digit of digits) {
+        const places = cells.filter((cell) => board[cell.row][cell.col] === 0 && candidates(board, cell.row, cell.col).includes(digit));
         if (places.length === 1) {
           const cell = places[0];
-          const related: Coordinate[] = [];
-          for (let r = boxRow * 3; r < boxRow * 3 + 3; r += 1) {
-            for (let c = boxCol * 3; c < boxCol * 3 + 3; c += 1) {
-              if (r !== cell.row || c !== cell.col) related.push({ row: r, col: c });
-            }
-          }
           return {
             kind: 'hidden-single-box',
             cell,
             digit,
             title: `${digit} остаётся только в этой клетке`,
-            explanation: `В этом квадрате 3×3 остальные клетки для цифры ${digit} исключаются их строками или столбцами.`,
-            related,
+            explanation: `В этой ${size === 5 ? 'области' : 'области блока'} остальные клетки для цифры ${digit} уже исключены.`,
+            related: cells.filter((p) => p.row !== cell.row || p.col !== cell.col),
             eliminated: eliminatedDigits(board, cell.row, cell.col),
           };
         }
