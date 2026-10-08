@@ -2,8 +2,7 @@ import { cloneBoard, cloneNotes } from './engine';
 import type { Digit, GameSnapshot } from './types';
 import type { GameAction } from './session';
 
-export type CellHistoryEntry = {
-  playerId: string;
+type CellPatch = {
   row: number;
   col: number;
   beforeValue: Digit | 0;
@@ -12,9 +11,16 @@ export type CellHistoryEntry = {
   afterNotes: Digit[];
 };
 
+export type PlayerHistoryEntry = {
+  playerId: string;
+  row: number;
+  col: number;
+  patches: CellPatch[];
+};
+
 type PlayerHistory = {
-  undo: CellHistoryEntry[];
-  redo: CellHistoryEntry[];
+  undo: PlayerHistoryEntry[];
+  redo: PlayerHistoryEntry[];
 };
 
 export type PlayerHistoryStore = Map<string, PlayerHistory>;
@@ -40,6 +46,16 @@ function isCellAction(action: GameAction): action is Extract<GameAction, { row: 
   return action.type === 'set' || action.type === 'clear' || action.type === 'note';
 }
 
+function patchMatches(snapshot: GameSnapshot, patch: CellPatch, side: 'before' | 'after') {
+  const value = side === 'before' ? patch.beforeValue : patch.afterValue;
+  const notes = side === 'before' ? patch.beforeNotes : patch.afterNotes;
+  return snapshot.board[patch.row][patch.col] === value && sameNotes(snapshot.notes[patch.row][patch.col], notes);
+}
+
+function targetPatch(entry: PlayerHistoryEntry) {
+  return entry.patches.find((patch) => patch.row === entry.row && patch.col === entry.col) ?? null;
+}
+
 export function recordPlayerAction(
   store: PlayerHistoryStore,
   before: GameSnapshot,
@@ -47,30 +63,36 @@ export function recordPlayerAction(
   action: GameAction,
 ) {
   if (!isCellAction(action)) return;
-  const beforeValue = before.board[action.row][action.col];
-  const afterValue = after.board[action.row][action.col];
-  const beforeNotes = [...before.notes[action.row][action.col]];
-  const afterNotes = [...after.notes[action.row][action.col]];
-  if (beforeValue === afterValue && sameNotes(beforeNotes, afterNotes)) return;
+  const patches: CellPatch[] = [];
 
+  for (let row = 0; row < before.size; row += 1) {
+    for (let col = 0; col < before.size; col += 1) {
+      const beforeValue = before.board[row][col];
+      const afterValue = after.board[row][col];
+      const beforeNotes = before.notes[row][col];
+      const afterNotes = after.notes[row][col];
+      if (beforeValue === afterValue && sameNotes(beforeNotes, afterNotes)) continue;
+      patches.push({
+        row,
+        col,
+        beforeValue,
+        beforeNotes: [...beforeNotes],
+        afterValue,
+        afterNotes: [...afterNotes],
+      });
+    }
+  }
+
+  if (!patches.some((patch) => patch.row === action.row && patch.col === action.col)) return;
   const history = historyFor(store, action.playerId);
-  history.undo.push({
-    playerId: action.playerId,
-    row: action.row,
-    col: action.col,
-    beforeValue,
-    beforeNotes,
-    afterValue,
-    afterNotes,
-  });
+  history.undo.push({ playerId: action.playerId, row: action.row, col: action.col, patches });
   if (history.undo.length > 100) history.undo.shift();
   history.redo = [];
 }
 
-function stateMatches(snapshot: GameSnapshot, entry: CellHistoryEntry, side: 'before' | 'after') {
-  const value = side === 'before' ? entry.beforeValue : entry.afterValue;
-  const notes = side === 'before' ? entry.beforeNotes : entry.afterNotes;
-  return snapshot.board[entry.row][entry.col] === value && sameNotes(snapshot.notes[entry.row][entry.col], notes);
+function entryTargetMatches(snapshot: GameSnapshot, entry: PlayerHistoryEntry, side: 'before' | 'after') {
+  const patch = targetPatch(entry);
+  return Boolean(patch && patchMatches(snapshot, patch, side));
 }
 
 export function applyPlayerHistoryStep(
@@ -88,7 +110,7 @@ export function applyPlayerHistoryStep(
 
   let chosenIndex = -1;
   for (let index = source.length - 1; index >= 0; index -= 1) {
-    if (stateMatches(snapshot, source[index], expectedSide)) {
+    if (entryTargetMatches(snapshot, source[index], expectedSide)) {
       chosenIndex = index;
       break;
     }
@@ -99,8 +121,14 @@ export function applyPlayerHistoryStep(
   target.push(entry);
   const board = cloneBoard(snapshot.board);
   const notes = cloneNotes(snapshot.notes);
-  board[entry.row][entry.col] = restoreSide === 'before' ? entry.beforeValue : entry.afterValue;
-  notes[entry.row][entry.col] = [...(restoreSide === 'before' ? entry.beforeNotes : entry.afterNotes)];
+
+  // Restore only cells that still match this action's own result. If the
+  // partner changed a related cell afterwards, their newer work wins.
+  for (const patch of entry.patches) {
+    if (!patchMatches(snapshot, patch, expectedSide)) continue;
+    board[patch.row][patch.col] = restoreSide === 'before' ? patch.beforeValue : patch.afterValue;
+    notes[patch.row][patch.col] = [...(restoreSide === 'before' ? patch.beforeNotes : patch.afterNotes)];
+  }
 
   return {
     ...snapshot,
@@ -119,5 +147,5 @@ export function canPlayerHistoryStep(
   const history = historyFor(store, playerId);
   const source = kind === 'undo' ? history.undo : history.redo;
   const expectedSide = kind === 'undo' ? 'after' : 'before';
-  return source.some((entry) => stateMatches(snapshot, entry, expectedSide));
+  return source.some((entry) => entryTargetMatches(snapshot, entry, expectedSide));
 }
