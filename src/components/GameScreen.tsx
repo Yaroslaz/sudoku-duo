@@ -111,7 +111,10 @@ export function GameScreen({
   const select = (row: number, col: number) => {
     if (paused || gameOver) return;
     const cell = { row, col };
-    if (!lockedDigit && !eraserMode && snapshot.board[row][col] === 0) setActiveDigit(null);
+    if (!lockedDigit && !eraserMode) {
+      const value = snapshot.board[row][col];
+      setActiveDigit(value || null);
+    }
     setSelected(cell);
     onCursor(cell, notesMode);
   };
