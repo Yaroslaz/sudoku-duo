@@ -1,7 +1,9 @@
+import { readFileSync } from 'node:fs';
 import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 
-const APP_VERSION = '1.1.0';
+const packageJson = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as { version: string };
+const APP_VERSION = packageJson.version;
 
 function offlineServiceWorker(): Plugin {
   return {
@@ -47,6 +49,10 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('message', (event) => {
   if (event.data?.type === 'GET_VERSION') {
     event.source?.postMessage({ type: 'APP_VERSION', version: APP_VERSION });
+    return;
+  }
+  if (event.data?.type === 'SKIP_WAITING') {
+    self.skipWaiting();
   }
 });
 
@@ -58,9 +64,22 @@ self.addEventListener('fetch', (event) => {
   if (event.request.mode === 'navigate') {
     event.respondWith((async () => {
       try {
-        return await fetch(event.request, { cache: 'no-store' });
+        const freshUrl = new URL(event.request.url);
+        freshUrl.searchParams.set('__app_version', APP_VERSION);
+        return await fetch(freshUrl.toString(), { cache: 'no-store' });
       } catch {
         return (await caches.match('./index.html')) || Response.error();
+      }
+    })());
+    return;
+  }
+
+  if (url.pathname.endsWith('/manifest.webmanifest')) {
+    event.respondWith((async () => {
+      try {
+        return await fetch(event.request, { cache: 'no-store' });
+      } catch {
+        return (await caches.match(event.request)) || Response.error();
       }
     })());
     return;
@@ -82,6 +101,9 @@ self.addEventListener('fetch', (event) => {
 export default defineConfig({
   plugins: [react(), offlineServiceWorker()],
   base: './',
+  define: {
+    __APP_VERSION__: JSON.stringify(APP_VERSION),
+  },
   server: {
     host: true,
   },
