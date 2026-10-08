@@ -53,3 +53,5 @@ jobs:
           fi
           git commit -m "Add Sudoku Duo app"
           git push
+
+# The second commit ensures the workflow is already present before the push event.
