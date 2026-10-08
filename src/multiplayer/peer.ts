@@ -13,9 +13,7 @@ export type PeerCallbacks = {
 };
 
 function rtcConfig(mode: NetworkMode): RTCConfiguration {
-  if (mode === 'internet-assisted') {
-    return { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
-  }
+  if (mode === 'internet-assisted') return { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
   return { iceServers: [] };
 }
 
@@ -47,13 +45,8 @@ export class PeerSession {
     this.callbacks = callbacks;
   }
 
-  getState() {
-    return this.state;
-  }
-
-  setCallbacks(callbacks: PeerCallbacks) {
-    this.callbacks = callbacks;
-  }
+  getState() { return this.state; }
+  setCallbacks(callbacks: PeerCallbacks) { this.callbacks = callbacks; }
 
   private setState(state: PeerState) {
     this.state = state;
@@ -113,7 +106,7 @@ export class PeerSession {
       protocol: 1,
       kind: 'offer',
       sdp: peer.localDescription.toJSON(),
-      sender: { id: this.localPlayer.id, name: this.localPlayer.name },
+      sender: { id: this.localPlayer.id, name: this.localPlayer.name, color: this.localPlayer.color },
       networkMode: mode,
     };
   }
@@ -134,7 +127,7 @@ export class PeerSession {
       protocol: 1,
       kind: 'answer',
       sdp: peer.localDescription.toJSON(),
-      sender: { id: this.localPlayer.id, name: this.localPlayer.name },
+      sender: { id: this.localPlayer.id, name: this.localPlayer.name, color: this.localPlayer.color },
       networkMode: offer.networkMode,
     };
   }
