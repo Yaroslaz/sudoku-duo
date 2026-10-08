@@ -44,6 +44,11 @@
 .reference-game .number-strip { position: relative; }
 .reference-game .number-strip.all-fit { overflow-x: hidden; gap: 0; }
 .reference-game .number-strip.all-fit .number-button { flex: 1 1 0; min-width: 0 !important; }
+.reference-game .number-strip.all-fit .number-glyph {
+  width: min(100%, 40px);
+  height: 40px;
+  font-size: clamp(1.65rem, 7.2vw, 2.7rem);
+}
 .reference-game .number-strip.scrolling { gap: 2px; padding-inline: 4px; }
 .reference-game .number-strip.scrolling .number-button { flex: 0 0 52px; min-width: 52px !important; }
 
