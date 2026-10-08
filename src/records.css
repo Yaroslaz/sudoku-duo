@@ -1,0 +1,151 @@
+.records-screen {
+  width: min(100%, 720px);
+  margin: 0 auto;
+  min-height: 100dvh;
+  padding: max(12px, var(--safe-top)) 16px max(28px, var(--safe-bottom));
+}
+
+.records-header {
+  min-height: 58px;
+  display: grid;
+  grid-template-columns: 42px 1fr 42px;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.records-back {
+  grid-column: 1;
+  display: grid !important;
+  place-items: center;
+}
+
+.records-title-wrap {
+  grid-column: 2;
+  text-align: center;
+}
+
+.records-title-wrap h2 {
+  margin: 0;
+  font-size: 1.35rem;
+}
+
+.records-summary {
+  margin-bottom: 24px;
+}
+
+.summary-card {
+  min-width: 0;
+  min-height: 112px;
+  display: grid;
+  grid-template-rows: 34px auto auto;
+  align-content: start;
+  gap: 6px;
+  background: rgba(255,255,255,.96);
+}
+
+.summary-value {
+  font-size: clamp(1.05rem, 5vw, 1.45rem);
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.records-section {
+  margin-top: 24px;
+}
+
+.record-row,
+.partner-row,
+.history-row {
+  display: grid;
+  align-items: center;
+  gap: 12px;
+  background: rgba(255,255,255,.96);
+}
+
+.record-row {
+  grid-template-columns: 62px minmax(0, 1fr);
+}
+
+.record-size-badge {
+  width: 62px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  background: #eef2ff;
+  color: #365cc7;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.record-row-main,
+.partner-copy,
+.history-main {
+  min-width: 0;
+}
+
+.partner-row {
+  grid-template-columns: 34px minmax(0, 1fr);
+}
+
+.partner-color {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 3px #fff, 0 0 0 4px rgba(0,0,0,.08);
+  justify-self: center;
+}
+
+.history-row {
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+}
+
+.history-result {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 1.05rem;
+  font-weight: 800;
+}
+
+.history-result.solved {
+  background: #e4f6ee;
+  color: #21845d;
+}
+
+.history-result.failed {
+  background: #ffebef;
+  color: #c63f58;
+}
+
+.history-score {
+  font-weight: 800;
+  color: #365f95;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 390px) {
+  .records-screen {
+    padding-inline: 12px;
+  }
+
+  .records-summary {
+    gap: 7px !important;
+  }
+
+  .summary-card {
+    padding: 10px !important;
+    min-height: 108px;
+  }
+
+  .summary-card .mantine-ThemeIcon-root {
+    width: 30px !important;
+    height: 30px !important;
+    min-width: 30px !important;
+  }
+}
