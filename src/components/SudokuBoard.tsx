@@ -204,7 +204,12 @@ export const SudokuBoard = memo(function SudokuBoard({
           <button key={`${r}-${c}`} className={classNames} data-sudoku-cell data-row={r} data-col={c} onClick={(event) => handleKeyboardClick(r, c, event)} onPointerDown={(event) => beginPaint(r, c, event)} role="gridcell" aria-label={`Строка ${r + 1}, столбец ${c + 1}${value ? `, символ ${symbolForDigit(value)}` : ', пусто'}${isGiven ? ', заданный символ' : ''}`}>
             {value ? <span className="cell-value">{symbolForDigit(value)}</span> : (
               <span className="notes-grid" style={{ gridTemplateColumns: `repeat(${noteColumns}, 1fr)`, gridTemplateRows: `repeat(${noteRows}, 1fr)` }} aria-label={notes[r][c].length ? `Заметки ${notes[r][c].map(symbolForDigit).join(', ')}` : undefined}>
-                {Array.from({ length: size }, (_, index) => { const digit = index + 1; return <span key={digit}>{notes[r][c].includes(digit) ? symbolForDigit(digit) : ''}</span>; })}
+                {Array.from({ length: size }, (_, index) => {
+                  const digit = index + 1;
+                  const visible = notes[r][c].includes(digit);
+                  const highlighted = visible && highlightDigit === digit;
+                  return <span key={digit} className={highlighted ? 'note-match' : undefined}>{visible ? symbolForDigit(digit) : ''}</span>;
+                })}
               </span>
             )}
             {isRemote && <span className="remote-dot" aria-hidden="true" />}
