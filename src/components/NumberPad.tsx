@@ -58,46 +58,48 @@ export function NumberPad({
   };
 
   return (
-    <Stack gap="xs" className={`number-pad-wrap ${notesMode ? 'notes-active' : ''}`}>
-      <Group justify="center" gap="xl" className="tool-row">
+    <Stack gap={8} className={`number-pad-wrap ${notesMode ? 'notes-active' : ''}`}>
+      <Group justify="space-around" gap={0} className="tool-row">
         <ActionIcon
-          variant={notesMode ? 'filled' : 'light'}
-          color="indigo"
+          variant="subtle"
+          color="gray"
           radius="xl"
-          size={48}
-          className="mode-button"
+          size={50}
+          onClick={onClear}
+          disabled={disabled}
+          aria-label="Стереть значение"
+          className="reference-tool"
+        >
+          <IconEraser size={29} stroke={1.75} />
+        </ActionIcon>
+        <ActionIcon
+          variant={notesMode ? 'light' : 'subtle'}
+          color={notesMode ? 'indigo' : 'gray'}
+          radius="xl"
+          size={50}
+          className="reference-tool mode-button"
           onClick={onToggleNotes}
           disabled={disabled}
           aria-pressed={notesMode}
           aria-label={notesMode ? 'Выключить заметки' : 'Включить заметки'}
         >
-          <IconPencil size={23} stroke={2} />
+          <IconPencil size={28} stroke={1.75} />
         </ActionIcon>
         <ActionIcon
-          variant="light"
+          variant="subtle"
           color="gray"
           radius="xl"
-          size={48}
-          onClick={onClear}
-          disabled={disabled}
-          aria-label="Стереть значение"
-        >
-          <IconEraser size={23} stroke={2} />
-        </ActionIcon>
-        <ActionIcon
-          variant="light"
-          color="yellow"
-          radius="xl"
-          size={48}
+          size={50}
           onClick={onHint}
           disabled={disabled}
           aria-label="Показать подсказку"
+          className="reference-tool"
         >
-          <IconBulb size={23} stroke={2} />
+          <IconBulb size={29} stroke={1.75} />
         </ActionIcon>
       </Group>
 
-      <SimpleGrid cols={9} spacing={6} className="number-pad">
+      <SimpleGrid cols={9} spacing={0} className="number-pad">
         {Array.from({ length: 9 }, (_, index) => (index + 1) as Digit).map((digit) => {
           const locked = lockedDigit === digit;
           const unavailable = !notesMode && remaining[digit] <= 0;
@@ -119,10 +121,7 @@ export function NumberPad({
               onContextMenu={(event) => event.preventDefault()}
               onClick={() => handleDigitClick(digit)}
             >
-              <span className="number-button-content">
-                <span className="number-glyph">{digit}</span>
-                <small>{Math.max(0, remaining[digit])}</small>
-              </span>
+              <span className="number-glyph">{digit}</span>
             </button>
           );
         })}
