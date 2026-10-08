@@ -84,6 +84,35 @@
   opacity: .82;
 }
 
+/* Final mobile-Chrome override. Mantine's Alert icon slot can resolve its
+   internal logical inset rules after the shared icon stylesheet. Use explicit
+   physical coordinates in the final CSS layer so the glyph cannot drift. */
+.pairing-screen .mantine-Alert-icon {
+  position: relative !important;
+  width: 36px !important;
+  height: 36px !important;
+  min-width: 36px !important;
+  min-height: 36px !important;
+  flex: 0 0 36px !important;
+  padding: 0 !important;
+  line-height: 0 !important;
+  overflow: hidden;
+}
+
+.pairing-screen .mantine-Alert-icon > svg.tabler-icon {
+  position: absolute !important;
+  top: 50% !important;
+  left: 50% !important;
+  right: auto !important;
+  bottom: auto !important;
+  width: 18px !important;
+  height: 18px !important;
+  margin: 0 !important;
+  translate: none !important;
+  transform: translate(-50%, -50%) !important;
+  transform-origin: center center !important;
+}
+
 @media (max-width: 390px) {
   .room-code-value {
     font-size: 2.7rem;
