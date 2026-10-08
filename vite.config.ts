@@ -1,6 +1,8 @@
 import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 
+const APP_VERSION = '1.1.0';
+
 function offlineServiceWorker(): Plugin {
   return {
     name: 'sudoku-offline-service-worker',
@@ -17,19 +19,35 @@ function offlineServiceWorker(): Plugin {
         './icons/apple-touch-icon.png',
       ];
       const precache = [...new Set([...staticFiles, ...generated])];
-      const cacheVersion = Date.now().toString(36);
+      const buildId = Date.now().toString(36);
       const source = `
-const CACHE = 'sudoku-duo-${cacheVersion}';
+const APP_VERSION = '${APP_VERSION}';
+const CACHE = 'sudoku-duo-v${APP_VERSION}-${buildId}';
 const PRECACHE = ${JSON.stringify(precache)};
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(PRECACHE)));
-  self.skipWaiting();
+  event.waitUntil((async () => {
+    const cache = await caches.open(CACHE);
+    await Promise.all(PRECACHE.map(async (url) => {
+      const response = await fetch(url, { cache: 'reload' });
+      if (response.ok) await cache.put(url, response);
+    }));
+    await self.skipWaiting();
+  })());
 });
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key)))));
-  self.clients.claim();
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(keys.filter((key) => key.startsWith('sudoku-duo-') && key !== CACHE).map((key) => caches.delete(key)));
+    await self.clients.claim();
+  })());
+});
+
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'GET_VERSION') {
+    event.source?.postMessage({ type: 'APP_VERSION', version: APP_VERSION });
+  }
 });
 
 self.addEventListener('fetch', (event) => {
@@ -38,7 +56,13 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return;
 
   if (event.request.mode === 'navigate') {
-    event.respondWith(fetch(event.request).catch(() => caches.match('./index.html')));
+    event.respondWith((async () => {
+      try {
+        return await fetch(event.request, { cache: 'no-store' });
+      } catch {
+        return (await caches.match('./index.html')) || Response.error();
+      }
+    })());
     return;
   }
 
