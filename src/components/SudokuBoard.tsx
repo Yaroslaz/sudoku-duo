@@ -50,10 +50,10 @@ export const SudokuBoard = memo(function SudokuBoard({
   const noteColumns = Math.ceil(Math.sqrt(size));
   const noteRows = Math.ceil(size / noteColumns);
   const hintRelated = useMemo(() => new Set(hint?.related.map((cell) => `${cell.row}:${cell.col}`) ?? []), [hint]);
-  const selectedRegion = selected ? regionId(size, selected.row, selected.col) : null;
   const showSelectionPeers = Boolean(
     selected
       && board[selected.row]?.[selected.col] === 0
+      && highlightDigit === null
       && !hint
       && !lockedDigit
       && !eraserMode,
@@ -193,7 +193,7 @@ export const SudokuBoard = memo(function SudokuBoard({
           showSelectionPeers
             && selected
             && !isSelected
-            && (r === selected.row || c === selected.col || currentRegion === selectedRegion),
+            && (r === selected.row || c === selected.col),
         );
         const key = `${r}:${c}`;
         const regionRight = c < size - 1 && regionId(size, r, c + 1) !== currentRegion;
