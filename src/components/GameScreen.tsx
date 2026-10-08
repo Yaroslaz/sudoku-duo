@@ -63,6 +63,7 @@ export function GameScreen({
   const [notesMode, setNotesMode] = useState(false);
   const [eraserMode, setEraserMode] = useState(false);
   const [lockedDigit, setLockedDigit] = useState<Digit | null>(null);
+  const [activeDigit, setActiveDigit] = useState<Digit | null>(null);
   const [hint, setHint] = useState<Hint | null>(null);
   const [hintOpen, setHintOpen] = useState(false);
   const [hintStep, setHintStep] = useState(0);
@@ -129,6 +130,7 @@ export function GameScreen({
     if (next) {
       setNotesMode(false);
       setLockedDigit(null);
+      setActiveDigit(null);
       onCursor(selected, false);
     }
   };
@@ -137,9 +139,11 @@ export function GameScreen({
     if (gameOver) return;
     setEraserMode(false);
     setLockedDigit(digit);
+    if (digit !== null) setActiveDigit(digit);
   };
 
   const digit = (value: Digit) => {
+    setActiveDigit(value);
     if (!selected || paused || gameOver || snapshot.puzzle[selected.row][selected.col] !== 0) return;
     setEraserMode(false);
     if (notesMode) {
@@ -156,6 +160,7 @@ export function GameScreen({
 
   const paintCell = (row: number, col: number, mode: PaintMode) => {
     if (!lockedDigit || paused || gameOver || snapshot.puzzle[row][col] !== 0) return;
+    setActiveDigit(lockedDigit);
     setSelected({ row, col });
     onCursor({ row, col }, notesMode);
     if (notesMode) {
@@ -176,6 +181,7 @@ export function GameScreen({
 
   const eraseCell = (row: number, col: number) => {
     if (paused || gameOver || snapshot.puzzle[row][col] !== 0) return;
+    setActiveDigit(null);
     setSelected({ row, col });
     onCursor({ row, col }, false);
     if (snapshot.board[row][col] === 0 && snapshot.notes[row][col].length === 0) return;
@@ -183,12 +189,14 @@ export function GameScreen({
   };
 
   const eraseSelected = () => {
+    setActiveDigit(null);
     if (!selected) return;
     eraseCell(selected.row, selected.col);
   };
 
   const askHint = () => {
     if (gameOver) return;
+    setActiveDigit(null);
     setEraserMode(false);
     const found = findHint(snapshot.board);
     setHint(found);
@@ -214,6 +222,7 @@ export function GameScreen({
     setNotesMode(false);
     setEraserMode(false);
     setLockedDigit(null);
+    setActiveDigit(null);
     onAction({ type: 'set', playerId: localPlayer.id, row: hint.cell.row, col: hint.cell.col, digit: hint.digit });
     closeHint();
   };
@@ -282,6 +291,7 @@ export function GameScreen({
           notesMode={notesMode}
           eraserMode={eraserMode}
           lockedDigit={lockedDigit}
+          highlightDigit={activeDigit}
           onSelect={select}
           onPaintCell={paintCell}
           onEraseCell={eraseCell}
@@ -296,6 +306,7 @@ export function GameScreen({
           eraserMode={eraserMode}
           hintActive={hintOpen}
           lockedDigit={lockedDigit}
+          activeDigit={activeDigit}
           disabled={paused || gameOver}
           onDigit={digit}
           onToggleNotes={toggleNotes}
@@ -303,6 +314,7 @@ export function GameScreen({
           onEraseSelected={eraseSelected}
           onHint={askHint}
           onLockDigit={changeLockedDigit}
+          onActiveDigit={setActiveDigit}
         />
       </section>
 

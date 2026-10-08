@@ -7,7 +7,7 @@ import type { BoardSize, Digit } from '../game/types';
 const LONG_PRESS_MS = 360;
 const MOVE_CANCEL_PX = 8;
 
-export function NumberPad({ size, notesMode, eraserMode, hintActive, disabled, remaining, lockedDigit, onDigit, onToggleNotes, onToggleEraser, onEraseSelected, onHint, onLockDigit }: {
+export function NumberPad({ size, notesMode, eraserMode, hintActive, disabled, remaining, lockedDigit, activeDigit, onDigit, onToggleNotes, onToggleEraser, onEraseSelected, onHint, onLockDigit, onActiveDigit }: {
   size: BoardSize;
   notesMode: boolean;
   eraserMode: boolean;
@@ -15,12 +15,14 @@ export function NumberPad({ size, notesMode, eraserMode, hintActive, disabled, r
   disabled: boolean;
   remaining: Record<number, number>;
   lockedDigit: Digit | null;
+  activeDigit: Digit | null;
   onDigit: (digit: Digit) => void;
   onToggleNotes: () => void;
   onToggleEraser: () => void;
   onEraseSelected: () => void;
   onHint: () => void;
   onLockDigit: (digit: Digit | null) => void;
+  onActiveDigit: (digit: Digit | null) => void;
 }) {
   const holdTimer = useRef<number | null>(null);
   const heldDigit = useRef<Digit | null>(null);
@@ -41,10 +43,11 @@ export function NumberPad({ size, notesMode, eraserMode, hintActive, disabled, r
       setBurst({ digit: completed, id: Date.now() });
       window.setTimeout(() => setBurst((current) => current?.digit === completed ? null : current), 650);
       if (lockedDigit === completed) onLockDigit(null);
+      if (activeDigit === completed) onActiveDigit(null);
       if ('vibrate' in navigator) navigator.vibrate?.([18, 28, 18]);
     }
     previousRemaining.current = { ...remaining };
-  }, [digits, lockedDigit, onLockDigit, remaining]);
+  }, [activeDigit, digits, lockedDigit, onActiveDigit, onLockDigit, remaining]);
 
   const clearHold = () => {
     if (holdTimer.current !== null) {
@@ -69,6 +72,7 @@ export function NumberPad({ size, notesMode, eraserMode, hintActive, disabled, r
     holdStart.current = { x, y };
     holdTimer.current = window.setTimeout(() => {
       longPressFired.current = true;
+      onActiveDigit(digit);
       onLockDigit(lockedDigit === digit ? null : digit);
       if ('vibrate' in navigator) navigator.vibrate?.(18);
     }, LONG_PRESS_MS);
@@ -100,12 +104,15 @@ export function NumberPad({ size, notesMode, eraserMode, hintActive, disabled, r
   };
 
   const handleDigitClick = (digit: Digit) => {
+    onActiveDigit(digit);
     if (longPressFired.current && heldDigit.current === digit) {
       longPressFired.current = false;
       heldDigit.current = null;
       return;
     }
-    if (lockedDigit === digit) return;
+    // While any symbol is locked, panel taps are only for visual highlighting.
+    // Input in locked mode happens exclusively by tapping/dragging on the board.
+    if (lockedDigit !== null) return;
     onDigit(digit);
   };
 
@@ -114,6 +121,7 @@ export function NumberPad({ size, notesMode, eraserMode, hintActive, disabled, r
       eraserLongPressFired.current = false;
       return;
     }
+    onActiveDigit(null);
     onEraseSelected();
   };
 
@@ -140,18 +148,19 @@ export function NumberPad({ size, notesMode, eraserMode, hintActive, disabled, r
           <IconEraser size={30} stroke={1.75} />
         </ActionIcon>
         <ActionIcon variant="subtle" color={notesMode ? 'indigo' : 'gray'} radius="md" size={52} className="reference-tool pressable-control" onClick={onToggleNotes} disabled={disabled} aria-pressed={notesMode} aria-label={notesMode ? 'Выключить заметки' : 'Включить заметки'}><IconPencil size={29} stroke={1.75} /></ActionIcon>
-        <ActionIcon variant="subtle" color={hintActive ? 'yellow' : 'gray'} radius="md" size={52} onClick={onHint} disabled={disabled} aria-pressed={hintActive} aria-label="Показать подсказку" className="reference-tool pressable-control"><IconBulb size={30} stroke={1.75} /></ActionIcon>
+        <ActionIcon variant="subtle" color={hintActive ? 'yellow' : 'gray'} radius="md" size={52} onClick={() => { onActiveDigit(null); onHint(); }} disabled={disabled} aria-pressed={hintActive} aria-label="Показать подсказку" className="reference-tool pressable-control"><IconBulb size={30} stroke={1.75} /></ActionIcon>
       </Group>
 
       <div className={`number-strip ${size === 9 ? 'all-fit' : 'scrolling'}`} role="group" aria-label="Символы для ввода">
         {visibleDigits.map((digit) => {
           const locked = lockedDigit === digit;
+          const active = activeDigit === digit;
           const symbol = symbolForDigit(digit);
           return (
             <button
               key={digit}
               type="button"
-              className={`number-button pressable-control ${locked ? 'locked' : ''} ${notesMode ? 'note-number' : ''}`}
+              className={`number-button pressable-control ${locked ? 'locked' : ''} ${active ? 'active' : ''} ${notesMode ? 'note-number' : ''}`}
               disabled={disabled}
               aria-pressed={locked}
               aria-label={locked ? `${symbol} закреплён. Нажимай клетки поля для ввода` : `Ввести ${symbol}. Удерживай, чтобы закрепить`}

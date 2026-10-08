@@ -14,8 +14,15 @@
 }
 
 .reference-game .number-button:not(:disabled):active .number-glyph,
-.reference-game .number-button.locked .number-glyph {
+.reference-game .number-button.locked .number-glyph,
+.reference-game .number-button.active .number-glyph {
   border-radius: 50%;
+}
+
+.reference-game .number-button.active:not(.locked) .number-glyph {
+  background: #eaf2fb;
+  color: #285f9f;
+  box-shadow: inset 0 0 0 1px rgba(49, 106, 177, .12);
 }
 
 .reference-game .number-button:focus,

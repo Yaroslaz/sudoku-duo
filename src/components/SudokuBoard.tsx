@@ -18,6 +18,7 @@ export const SudokuBoard = memo(function SudokuBoard({
   notesMode,
   eraserMode,
   lockedDigit,
+  highlightDigit,
   onSelect,
   onPaintCell,
   onEraseCell,
@@ -34,6 +35,7 @@ export const SudokuBoard = memo(function SudokuBoard({
   notesMode: boolean;
   eraserMode: boolean;
   lockedDigit: Digit | null;
+  highlightDigit: Digit | null;
   onSelect: (row: number, col: number) => void;
   onPaintCell: (row: number, col: number, mode: PaintMode) => void;
   onEraseCell: (row: number, col: number) => void;
@@ -45,7 +47,6 @@ export const SudokuBoard = memo(function SudokuBoard({
   const paintMode = useRef<PaintMode>('add');
   const paintedCells = useRef(new Set<string>());
   const activePointer = useRef<number | null>(null);
-  const selectedValue = notesMode && lockedDigit ? lockedDigit : 0;
   const noteColumns = Math.ceil(Math.sqrt(size));
   const noteRows = Math.ceil(size / noteColumns);
   const hintRelated = useMemo(() => new Set(hint?.related.map((cell) => `${cell.row}:${cell.col}`) ?? []), [hint]);
@@ -176,7 +177,7 @@ export const SudokuBoard = memo(function SudokuBoard({
         const isGiven = puzzle[r][c] !== 0;
         const isSelected = selected?.row === r && selected?.col === c;
         const isRemote = remoteSelected?.row === r && remoteSelected?.col === c;
-        const isSameValue = Boolean(selectedValue && value === selectedValue);
+        const isSameValue = Boolean(highlightDigit && value === highlightDigit);
         const isWrong = Boolean(value && !isGiven && solution[r][c] !== value);
         const isHintCell = hint?.cell.row === r && hint?.cell.col === c;
         const key = `${r}:${c}`;
