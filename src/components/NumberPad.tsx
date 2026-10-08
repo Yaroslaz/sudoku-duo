@@ -1,5 +1,5 @@
 import { ActionIcon, Group, SimpleGrid, Stack } from '@mantine/core';
-import { IconEraser, IconPencil } from '@tabler/icons-react';
+import { IconBulb, IconEraser, IconPencil } from '@tabler/icons-react';
 import { useRef } from 'react';
 import type { Digit } from '../game/types';
 
@@ -13,6 +13,7 @@ export function NumberPad({
   onDigit,
   onToggleNotes,
   onClear,
+  onHint,
   onLockDigit,
 }: {
   notesMode: boolean;
@@ -22,6 +23,7 @@ export function NumberPad({
   onDigit: (digit: Digit) => void;
   onToggleNotes: () => void;
   onClear: () => void;
+  onHint: () => void;
   onLockDigit: (digit: Digit | null) => void;
 }) {
   const holdTimer = useRef<number | null>(null);
@@ -56,7 +58,45 @@ export function NumberPad({
   };
 
   return (
-    <Stack gap="sm" className={`number-pad-wrap ${notesMode ? 'notes-active' : ''}`}>
+    <Stack gap="xs" className={`number-pad-wrap ${notesMode ? 'notes-active' : ''}`}>
+      <Group justify="center" gap="xl" className="tool-row">
+        <ActionIcon
+          variant={notesMode ? 'filled' : 'light'}
+          color="indigo"
+          radius="xl"
+          size={48}
+          className="mode-button"
+          onClick={onToggleNotes}
+          disabled={disabled}
+          aria-pressed={notesMode}
+          aria-label={notesMode ? 'Выключить заметки' : 'Включить заметки'}
+        >
+          <IconPencil size={23} stroke={2} />
+        </ActionIcon>
+        <ActionIcon
+          variant="light"
+          color="gray"
+          radius="xl"
+          size={48}
+          onClick={onClear}
+          disabled={disabled}
+          aria-label="Стереть значение"
+        >
+          <IconEraser size={23} stroke={2} />
+        </ActionIcon>
+        <ActionIcon
+          variant="light"
+          color="yellow"
+          radius="xl"
+          size={48}
+          onClick={onHint}
+          disabled={disabled}
+          aria-label="Показать подсказку"
+        >
+          <IconBulb size={23} stroke={2} />
+        </ActionIcon>
+      </Group>
+
       <SimpleGrid cols={9} spacing={6} className="number-pad">
         {Array.from({ length: 9 }, (_, index) => (index + 1) as Digit).map((digit) => {
           const locked = lockedDigit === digit;
@@ -87,33 +127,6 @@ export function NumberPad({
           );
         })}
       </SimpleGrid>
-
-      <Group justify="center" gap="xl" className="tool-row">
-        <ActionIcon
-          variant={notesMode ? 'filled' : 'light'}
-          color="indigo"
-          radius="xl"
-          size={52}
-          className="mode-button"
-          onClick={onToggleNotes}
-          disabled={disabled}
-          aria-pressed={notesMode}
-          aria-label={notesMode ? 'Выключить заметки' : 'Включить заметки'}
-        >
-          <IconPencil size={24} stroke={2} />
-        </ActionIcon>
-        <ActionIcon
-          variant="light"
-          color="gray"
-          radius="xl"
-          size={52}
-          onClick={onClear}
-          disabled={disabled}
-          aria-label="Стереть значение"
-        >
-          <IconEraser size={24} stroke={2} />
-        </ActionIcon>
-      </Group>
     </Stack>
   );
 }
