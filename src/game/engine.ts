@@ -1,47 +1,49 @@
 import { createRng, hashString, shuffle } from './random';
 import type { Board, BoardSize, CellValue, Coordinate, Difficulty, Digit, Hint, NotesGrid } from './types';
 
-const ALL_DIGITS: Digit[] = [1, 2, 3, 4, 5, 6, 7, 8, 9];
-
-export const boardSizes: BoardSize[] = [4, 5, 6, 9];
+export const boardSizes: BoardSize[] = [9, 12, 15, 18];
 export const boardSizeLabels: Record<BoardSize, string> = {
-  4: '4×4',
-  5: '5×5',
-  6: '6×6',
   9: '9×9',
+  12: '12×12',
+  15: '15×15',
+  18: '18×18',
 };
 
 export const difficultyLabels: Record<Difficulty, string> = {
-  easy: 'Легко',
-  medium: 'Средне',
-  hard: 'Сложно',
-  expert: 'Эксперт',
+  easy: 'Лёгкая',
+  medium: 'Обычная',
+  hard: 'Сложная',
+  expert: 'Экспертная',
+  legendary: 'Легендарная',
+  epic: 'Эпическая',
 };
+
+export const difficulties: Difficulty[] = ['easy', 'medium', 'hard', 'expert', 'legendary', 'epic'];
 
 const targetClues: Record<BoardSize, Record<Difficulty, number>> = {
-  4: { easy: 10, medium: 8, hard: 7, expert: 6 },
-  5: { easy: 16, medium: 14, hard: 12, expert: 11 },
-  6: { easy: 23, medium: 20, hard: 17, expert: 15 },
-  9: { easy: 42, medium: 36, hard: 31, expert: 27 },
+  9: { easy: 45, medium: 40, hard: 36, expert: 32, legendary: 29, epic: 26 },
+  12: { easy: 96, medium: 88, hard: 80, expert: 72, legendary: 66, epic: 60 },
+  15: { easy: 154, medium: 142, hard: 130, expert: 118, legendary: 108, epic: 98 },
+  18: { easy: 226, medium: 210, hard: 194, expert: 178, legendary: 164, epic: 150 },
 };
 
-const regions5: number[][] = [
-  [0, 0, 1, 1, 1],
-  [0, 0, 1, 2, 1],
-  [0, 3, 2, 2, 2],
-  [3, 3, 3, 2, 4],
-  [3, 4, 4, 4, 4],
-];
-
 export function digitsForSize(size: number): Digit[] {
-  return ALL_DIGITS.slice(0, size) as Digit[];
+  return Array.from({ length: size }, (_, index) => index + 1);
+}
+
+export function symbolForDigit(digit: Digit): string {
+  if (digit <= 9) return String(digit);
+  return String.fromCharCode('A'.charCodeAt(0) + digit - 10);
+}
+
+export function regionDimensions(size: BoardSize): { rows: number; cols: number } {
+  return { rows: size / 3, cols: 3 };
 }
 
 export function regionId(size: BoardSize, row: number, col: number): number {
-  if (size === 4) return Math.floor(row / 2) * 2 + Math.floor(col / 2);
-  if (size === 6) return Math.floor(row / 2) * 2 + Math.floor(col / 3);
-  if (size === 9) return Math.floor(row / 3) * 3 + Math.floor(col / 3);
-  return regions5[row]?.[col] ?? -1;
+  const { rows, cols } = regionDimensions(size);
+  const regionsAcross = size / cols;
+  return Math.floor(row / rows) * regionsAcross + Math.floor(col / cols);
 }
 
 export function regionCells(size: BoardSize, row: number, col: number): Coordinate[] {
@@ -56,7 +58,8 @@ export function regionCells(size: BoardSize, row: number, col: number): Coordina
 }
 
 export function regionName(size: BoardSize): string {
-  return size === 5 ? 'области' : size === 9 ? 'квадрате 3×3' : 'блоке';
+  const { rows, cols } = regionDimensions(size);
+  return `блоке ${rows}×${cols}`;
 }
 
 export function emptyBoard(size: BoardSize = 9): Board {
@@ -81,12 +84,11 @@ export function isCoordinate(value: number, size = 9): boolean {
 
 export function isValidPlacement(board: Board, row: number, col: number, digit: Digit): boolean {
   const size = board.length as BoardSize;
-  if (!digitsForSize(size).includes(digit)) return false;
+  if (!Number.isInteger(digit) || digit < 1 || digit > size) return false;
   for (let i = 0; i < size; i += 1) {
     if (i !== col && board[row][i] === digit) return false;
     if (i !== row && board[i][col] === digit) return false;
   }
-
   const id = regionId(size, row, col);
   for (let r = 0; r < size; r += 1) {
     for (let c = 0; c < size; c += 1) {
@@ -122,7 +124,6 @@ function findEmptyWithFewestCandidates(board: Board): Coordinate | null {
 export function solveBoard(input: Board, seed = 1): Board | null {
   const board = cloneBoard(input);
   const rng = createRng(seed);
-
   function solve(): boolean {
     const cell = findEmptyWithFewestCandidates(board);
     if (!cell) return true;
@@ -134,50 +135,109 @@ export function solveBoard(input: Board, seed = 1): Board | null {
     }
     return false;
   }
-
   return solve() ? board : null;
 }
 
-export function countSolutions(input: Board, limit = 2): number {
-  const board = cloneBoard(input);
+function bitCount(value: number) {
   let count = 0;
+  let current = value;
+  while (current) {
+    current &= current - 1;
+    count += 1;
+  }
+  return count;
+}
 
-  function search() {
+export function countSolutions(input: Board, limit = 2): number {
+  const size = input.length as BoardSize;
+  const fullMask = (1 << size) - 1;
+  const rowMasks = Array<number>(size).fill(0);
+  const colMasks = Array<number>(size).fill(0);
+  const regionMasks = Array<number>(size).fill(0);
+  const board = cloneBoard(input);
+
+  for (let row = 0; row < size; row += 1) {
+    for (let col = 0; col < size; col += 1) {
+      const digit = board[row][col];
+      if (!digit) continue;
+      if (digit < 1 || digit > size) return 0;
+      const bit = 1 << (digit - 1);
+      const region = regionId(size, row, col);
+      if ((rowMasks[row] & bit) || (colMasks[col] & bit) || (regionMasks[region] & bit)) return 0;
+      rowMasks[row] |= bit;
+      colMasks[col] |= bit;
+      regionMasks[region] |= bit;
+    }
+  }
+
+  let count = 0;
+  const search = () => {
     if (count >= limit) return;
-    const cell = findEmptyWithFewestCandidates(board);
-    if (!cell) {
+    let bestRow = -1;
+    let bestCol = -1;
+    let bestMask = 0;
+    let bestCount = size + 1;
+
+    for (let row = 0; row < size; row += 1) {
+      for (let col = 0; col < size; col += 1) {
+        if (board[row][col] !== 0) continue;
+        const region = regionId(size, row, col);
+        const mask = fullMask & ~(rowMasks[row] | colMasks[col] | regionMasks[region]);
+        const options = bitCount(mask);
+        if (options === 0) return;
+        if (options < bestCount) {
+          bestRow = row;
+          bestCol = col;
+          bestMask = mask;
+          bestCount = options;
+          if (options === 1) break;
+        }
+      }
+      if (bestCount === 1) break;
+    }
+
+    if (bestRow < 0) {
       count += 1;
       return;
     }
-    for (const digit of candidates(board, cell.row, cell.col)) {
-      board[cell.row][cell.col] = digit;
+
+    const region = regionId(size, bestRow, bestCol);
+    let choices = bestMask;
+    while (choices && count < limit) {
+      const bit = choices & -choices;
+      choices -= bit;
+      const digit = Math.log2(bit) + 1;
+      board[bestRow][bestCol] = digit;
+      rowMasks[bestRow] |= bit;
+      colMasks[bestCol] |= bit;
+      regionMasks[region] |= bit;
       search();
-      board[cell.row][cell.col] = 0;
-      if (count >= limit) return;
+      rowMasks[bestRow] ^= bit;
+      colMasks[bestCol] ^= bit;
+      regionMasks[region] ^= bit;
+      board[bestRow][bestCol] = 0;
     }
-  }
+  };
 
   search();
   return count;
 }
 
+function shuffledGroupedIndices(size: number, groupSize: number, rng: () => number) {
+  const groups = Array.from({ length: size / groupSize }, (_, group) =>
+    Array.from({ length: groupSize }, (_, index) => group * groupSize + index),
+  );
+  return shuffle(groups, rng).flatMap((group) => shuffle(group, rng));
+}
+
 function makeSolvedBoard(size: BoardSize, seed: string): Board {
-  const board = emptyBoard(size);
   const rng = createRng(hashString(`${seed}:${size}`));
-
-  function fill(): boolean {
-    const cell = findEmptyWithFewestCandidates(board);
-    if (!cell) return true;
-    for (const digit of shuffle(candidates(board, cell.row, cell.col), rng)) {
-      board[cell.row][cell.col] = digit;
-      if (fill()) return true;
-      board[cell.row][cell.col] = 0;
-    }
-    return false;
-  }
-
-  if (!fill()) throw new Error('Не удалось создать решённую сетку');
-  return board;
+  const { rows: blockRows, cols: blockCols } = regionDimensions(size);
+  const rowOrder = shuffledGroupedIndices(size, blockRows, rng);
+  const colOrder = shuffledGroupedIndices(size, blockCols, rng);
+  const symbols = shuffle(digitsForSize(size), rng);
+  const pattern = (row: number, col: number) => (blockCols * (row % blockRows) + Math.floor(row / blockRows) + col) % size;
+  return rowOrder.map((row) => colOrder.map((col) => symbols[pattern(row, col)]));
 }
 
 export function generatePuzzle(difficulty: Difficulty, size: BoardSize = 9, seed: string = crypto.randomUUID()) {
@@ -185,10 +245,7 @@ export function generatePuzzle(difficulty: Difficulty, size: BoardSize = 9, seed
   const puzzle = cloneBoard(solution);
   const rng = createRng(hashString(`${seed}:${difficulty}:${size}`));
   const total = size * size;
-  const cells = shuffle(
-    Array.from({ length: total }, (_, index) => ({ row: Math.floor(index / size), col: index % size })),
-    rng,
-  );
+  const cells = shuffle(Array.from({ length: total }, (_, index) => ({ row: Math.floor(index / size), col: index % size })), rng);
   const target = targetClues[size][difficulty];
   let clues = total;
 
@@ -218,22 +275,19 @@ export function removePeerNotes(notes: NotesGrid, row: number, col: number, digi
     next[row][i] = next[row][i].filter((n) => n !== digit);
     next[i][col] = next[i][col].filter((n) => n !== digit);
   }
-  for (const cell of regionCells(size, row, col)) {
-    next[cell.row][cell.col] = next[cell.row][cell.col].filter((n) => n !== digit);
-  }
+  for (const cell of regionCells(size, row, col)) next[cell.row][cell.col] = next[cell.row][cell.col].filter((n) => n !== digit);
   return next;
 }
 
 function relatedCells(board: Board, row: number, col: number): Coordinate[] {
   const size = board.length as BoardSize;
-  const key = (r: number, c: number) => `${r}:${c}`;
   const seen = new Set<string>();
   const output: Coordinate[] = [];
   const add = (r: number, c: number) => {
     if (r === row && c === col) return;
-    const k = key(r, c);
-    if (!seen.has(k)) {
-      seen.add(k);
+    const key = `${r}:${c}`;
+    if (!seen.has(key)) {
+      seen.add(key);
       output.push({ row: r, col: c });
     }
   };
@@ -259,15 +313,7 @@ export function findHint(board: Board): Hint | null {
       const options = candidates(board, row, col);
       if (options.length === 1) {
         const digit = options[0];
-        return {
-          kind: 'naked-single',
-          cell: { row, col },
-          digit,
-          title: `Здесь подходит только ${digit}`,
-          explanation: `Остальные цифры уже встречаются в этой строке, столбце или ${regionName(size)}, поэтому остаётся единственный вариант.`,
-          related: relatedCells(board, row, col),
-          eliminated: eliminatedDigits(board, row, col),
-        };
+        return { kind: 'naked-single', cell: { row, col }, digit, title: `Здесь подходит только ${symbolForDigit(digit)}`, explanation: `Остальные варианты уже встречаются в этой строке, столбце или ${regionName(size)}.`, related: relatedCells(board, row, col), eliminated: eliminatedDigits(board, row, col) };
       }
     }
   }
@@ -275,20 +321,10 @@ export function findHint(board: Board): Hint | null {
   for (let row = 0; row < size; row += 1) {
     for (const digit of digits) {
       const places: Coordinate[] = [];
-      for (let col = 0; col < size; col += 1) {
-        if (board[row][col] === 0 && candidates(board, row, col).includes(digit)) places.push({ row, col });
-      }
+      for (let col = 0; col < size; col += 1) if (board[row][col] === 0 && candidates(board, row, col).includes(digit)) places.push({ row, col });
       if (places.length === 1) {
         const cell = places[0];
-        return {
-          kind: 'hidden-single-row',
-          cell,
-          digit,
-          title: `${digit} может стоять только здесь`,
-          explanation: `В этой строке для цифры ${digit} осталась только одна допустимая клетка.`,
-          related: Array.from({ length: size }, (_, col) => ({ row, col })).filter((p) => p.col !== cell.col),
-          eliminated: eliminatedDigits(board, cell.row, cell.col),
-        };
+        return { kind: 'hidden-single-row', cell, digit, title: `${symbolForDigit(digit)} может стоять только здесь`, explanation: `В этой строке для ${symbolForDigit(digit)} осталась одна допустимая клетка.`, related: Array.from({ length: size }, (_, col) => ({ row, col })).filter((p) => p.col !== cell.col), eliminated: eliminatedDigits(board, cell.row, cell.col) };
       }
     }
   }
@@ -296,20 +332,10 @@ export function findHint(board: Board): Hint | null {
   for (let col = 0; col < size; col += 1) {
     for (const digit of digits) {
       const places: Coordinate[] = [];
-      for (let row = 0; row < size; row += 1) {
-        if (board[row][col] === 0 && candidates(board, row, col).includes(digit)) places.push({ row, col });
-      }
+      for (let row = 0; row < size; row += 1) if (board[row][col] === 0 && candidates(board, row, col).includes(digit)) places.push({ row, col });
       if (places.length === 1) {
         const cell = places[0];
-        return {
-          kind: 'hidden-single-column',
-          cell,
-          digit,
-          title: `${digit} может стоять только здесь`,
-          explanation: `В этом столбце цифру ${digit} можно поставить только в одну клетку.`,
-          related: Array.from({ length: size }, (_, row) => ({ row, col })).filter((p) => p.row !== cell.row),
-          eliminated: eliminatedDigits(board, cell.row, cell.col),
-        };
+        return { kind: 'hidden-single-column', cell, digit, title: `${symbolForDigit(digit)} может стоять только здесь`, explanation: `В этом столбце ${symbolForDigit(digit)} можно поставить только в одну клетку.`, related: Array.from({ length: size }, (_, row) => ({ row, col })).filter((p) => p.row !== cell.row), eliminated: eliminatedDigits(board, cell.row, cell.col) };
       }
     }
   }
@@ -325,26 +351,19 @@ export function findHint(board: Board): Hint | null {
         const places = cells.filter((cell) => board[cell.row][cell.col] === 0 && candidates(board, cell.row, cell.col).includes(digit));
         if (places.length === 1) {
           const cell = places[0];
-          return {
-            kind: 'hidden-single-box',
-            cell,
-            digit,
-            title: `${digit} остаётся только в этой клетке`,
-            explanation: `В этой ${size === 5 ? 'области' : 'области блока'} остальные клетки для цифры ${digit} уже исключены.`,
-            related: cells.filter((p) => p.row !== cell.row || p.col !== cell.col),
-            eliminated: eliminatedDigits(board, cell.row, cell.col),
-          };
+          return { kind: 'hidden-single-box', cell, digit, title: `${symbolForDigit(digit)} остаётся только в этой клетке`, explanation: `В ${regionName(size)} остальные позиции для ${symbolForDigit(digit)} уже исключены.`, related: cells.filter((p) => p.row !== cell.row || p.col !== cell.col), eliminated: eliminatedDigits(board, cell.row, cell.col) };
         }
       }
     }
   }
-
   return null;
 }
 
 export function formatDuration(ms: number): string {
   const totalSeconds = Math.max(0, Math.floor(ms / 1000));
-  const minutes = Math.floor(totalSeconds / 60);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
+  if (hours > 0) return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 }
