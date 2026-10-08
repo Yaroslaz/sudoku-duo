@@ -4,6 +4,7 @@ import { GameScreen } from './components/GameScreen';
 import { HomeScreen } from './components/HomeScreen';
 import { PairingScreen, type PairingResult } from './components/PairingScreen';
 import { RulesModal } from './components/RulesModal';
+import { recordFinishedGame, rememberPartner } from './game/records';
 import { applyGameAction, createGame, type GameAction } from './game/session';
 import { getDeviceId, getSavedColor, getSavedName, loadGame, saveColor, saveGame, saveName } from './game/storage';
 import type { BoardSize, Coordinate, Difficulty, GameSnapshot, MistakeLimit, Player, PlayerColor } from './game/types';
@@ -57,6 +58,9 @@ export default function App() {
     if (!snapshot) return;
     saveGame(snapshot);
     setSavedGame(snapshot);
+    if (snapshot.completedAt || snapshot.failedAt) {
+      recordFinishedGame(snapshot, playersRef.current, localPlayerRef.current.id);
+    }
   }, [snapshot]);
 
   const replaceOrAddPlayer = (player: Player) => {
@@ -175,6 +179,7 @@ export default function App() {
     const nextPlayers = [result.localPlayer, result.remotePlayer];
     setPlayers(nextPlayers);
     playersRef.current = nextPlayers;
+    rememberPartner(result.remotePlayer);
     setPeerState('connected');
     setLatency(null);
     setRemoteCursor(null);
