@@ -1,5 +1,5 @@
-import { Button, Group, SimpleGrid, Stack, Text } from '@mantine/core';
-import { IconEraser, IconLock, IconPencil } from '@tabler/icons-react';
+import { ActionIcon, Group, SimpleGrid, Stack } from '@mantine/core';
+import { IconEraser, IconPencil } from '@tabler/icons-react';
 import { useRef } from 'react';
 import type { Digit } from '../game/types';
 
@@ -61,11 +61,11 @@ export function NumberPad({
         {Array.from({ length: 9 }, (_, index) => (index + 1) as Digit).map((digit) => {
           const locked = lockedDigit === digit;
           const unavailable = !notesMode && remaining[digit] <= 0;
+
           return (
-            <Button
+            <button
               key={digit}
-              variant={locked ? 'filled' : 'default'}
-              color={locked ? 'indigo' : 'gray'}
+              type="button"
               className={`number-button ${locked ? 'locked' : ''} ${notesMode ? 'note-number' : ''}`}
               disabled={disabled || (unavailable && !locked)}
               aria-pressed={locked}
@@ -80,38 +80,39 @@ export function NumberPad({
               onClick={() => handleDigitClick(digit)}
             >
               <span className="number-button-content">
-                {locked && <IconLock size={11} stroke={2.2} className="number-lock-icon" aria-hidden="true" />}
                 <span className="number-glyph">{digit}</span>
                 <small>{Math.max(0, remaining[digit])}</small>
               </span>
-            </Button>
+            </button>
           );
         })}
       </SimpleGrid>
 
-      <Group grow gap="sm" className="tool-row">
-        <Button
+      <Group justify="center" gap="xl" className="tool-row">
+        <ActionIcon
           variant={notesMode ? 'filled' : 'light'}
           color="indigo"
           radius="xl"
+          size={52}
           className="mode-button"
-          leftSection={<IconPencil size={18} stroke={2.2} />}
           onClick={onToggleNotes}
           disabled={disabled}
           aria-pressed={notesMode}
+          aria-label={notesMode ? 'Выключить заметки' : 'Включить заметки'}
         >
-          <Text span size="sm" fw={650}>{notesMode ? 'Заметки включены' : 'Заметки'}</Text>
-        </Button>
-        <Button
+          <IconPencil size={24} stroke={2} />
+        </ActionIcon>
+        <ActionIcon
           variant="light"
           color="gray"
           radius="xl"
-          leftSection={<IconEraser size={18} stroke={2} />}
+          size={52}
           onClick={onClear}
           disabled={disabled}
+          aria-label="Стереть значение"
         >
-          <Text span size="sm" fw={650}>Стереть</Text>
-        </Button>
+          <IconEraser size={24} stroke={2} />
+        </ActionIcon>
       </Group>
     </Stack>
   );
