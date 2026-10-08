@@ -3,6 +3,7 @@ import {
   Container,
   Group,
   Paper,
+  Select,
   SimpleGrid,
   Stack,
   Text,
@@ -10,7 +11,7 @@ import {
   UnstyledButton,
 } from '@mantine/core';
 import { IconArrowRight, IconBook2, IconPlayerPlay, IconUser, IconUsers } from '@tabler/icons-react';
-import { useState } from 'react';
+import { useState, type CSSProperties } from 'react';
 import { boardSizes, difficulties, difficultyLabels, regionDimensions } from '../game/engine';
 import type { BoardSize, Difficulty, GameSnapshot } from '../game/types';
 
@@ -28,7 +29,9 @@ export function HomeScreen({
   onRules: () => void;
 }) {
   const [size, setSize] = useState<BoardSize>(9);
+  const [difficulty, setDifficulty] = useState<Difficulty>('medium');
   const region = regionDimensions(size);
+  const difficultyData = difficulties.map((value) => ({ value, label: difficultyLabels[value] }));
 
   return (
     <Container size="sm" className="home-screen">
@@ -51,7 +54,7 @@ export function HomeScreen({
             <Stack gap="md" className="home-hero-copy">
               <Stack gap={6}>
                 <Text component="h1" className="home-title" fw={800}>Судоку на двоих</Text>
-                <Text c="dimmed" size="md" className="home-hero-text">Оба видят одно поле, ходы и заметки сразу появляются на втором телефоне.</Text>
+                <Text c="dimmed" size="md" className="home-hero-text">Одно поле на двух телефонах. Ходы и заметки синхронизируются сразу.</Text>
               </Stack>
               <Button size="lg" radius="xl" color="indigo" leftSection={<IconUsers size={20} stroke={2.1} />} rightSection={<IconArrowRight size={18} />} onClick={onMultiplayer} className="primary-action">Играть вдвоём</Button>
             </Stack>
@@ -70,53 +73,88 @@ export function HomeScreen({
                     <Text size="sm" c="dimmed">{savedGame.size ?? 9}×{savedGame.size ?? 9} · {difficultyLabels[savedGame.difficulty]}</Text>
                   </Stack>
                 </Group>
-                <IconArrowRight size={18} aria-hidden="true" />
+                <MiniResumeBoard />
               </Group>
             </Paper>
           </UnstyledButton>
         )}
 
         <Paper radius="xl" p="lg" shadow="xs" className="solo-card">
-          <Stack gap="md">
+          <Stack gap="lg">
             <Group gap="sm">
               <ThemeIcon variant="light" color="gray" radius="xl" size="lg"><IconUser size={18} /></ThemeIcon>
-              <Stack gap={0}><Text fw={700}>Играть одному</Text><Text size="xs" c="dimmed">Сначала размер, потом сложность</Text></Stack>
+              <Stack gap={0}><Text fw={700}>Играть одному</Text><Text size="xs" c="dimmed">Выбери поле и сложность</Text></Stack>
             </Group>
 
-            <Stack gap={7}>
-              <Text size="sm" c="dimmed">Размер поля</Text>
-              <SimpleGrid cols={4} spacing="xs" className="board-size-grid">
-                {boardSizes.map((value) => (
-                  <Button
-                    key={value}
-                    variant={size === value ? 'light' : 'default'}
-                    color="indigo"
-                    radius="md"
-                    onClick={() => setSize(value)}
-                    aria-pressed={size === value}
-                    className="board-size-button"
-                  >
-                    {value}×{value}
-                  </Button>
-                ))}
+            <Stack gap="sm">
+              <Text size="sm" fw={650}>Размер поля</Text>
+              <SimpleGrid cols={{ base: 2, xs: 4 }} spacing="sm" className="board-mode-grid">
+                {boardSizes.map((value) => {
+                  const selected = size === value;
+                  const valueRegion = regionDimensions(value);
+                  return (
+                    <UnstyledButton key={value} onClick={() => setSize(value)} className="board-mode-button" aria-pressed={selected}>
+                      <Paper className={selected ? 'board-mode-card active' : 'board-mode-card'} radius="lg" p="sm" withBorder>
+                        <BoardSizeIllustration size={value} />
+                        <Text fw={750} className="board-mode-title">{value}×{value}</Text>
+                        <Text size="xs" c="dimmed">Блоки {valueRegion.rows}×{valueRegion.cols}</Text>
+                      </Paper>
+                    </UnstyledButton>
+                  );
+                })}
               </SimpleGrid>
-              <Text size="xs" c="dimmed">Блоки {region.rows}×{region.cols}. После 9 на больших полях используются буквы A–I.</Text>
+              <Text size="xs" c="dimmed">На полях больше 9×9 после цифры 9 используются буквы A–I.</Text>
             </Stack>
 
-            <Stack gap={7}>
-              <Text size="sm" c="dimmed">Сложность</Text>
-              <SimpleGrid cols={{ base: 2, xs: 3 }} spacing="sm">
-                {difficulties.map((difficulty) => (
-                  <Button key={difficulty} variant="default" color="gray" radius="lg" size="md" onClick={() => onSolo(difficulty, size)} className="difficulty-button">{difficultyLabels[difficulty]}</Button>
-                ))}
-              </SimpleGrid>
+            <Stack gap="sm">
+              <Text size="sm" fw={650}>Сложность</Text>
+              <Select
+                data={difficultyData}
+                value={difficulty}
+                onChange={(value) => value && setDifficulty(value as Difficulty)}
+                allowDeselect={false}
+                size="md"
+                radius="lg"
+                className="difficulty-select"
+              />
+              <Text size="xs" c="dimmed">{difficultyDescription(difficulty)}</Text>
             </Stack>
+
+            <Button size="lg" radius="xl" color="indigo" rightSection={<IconArrowRight size={18} />} onClick={() => onSolo(difficulty, size)}>
+              Начать игру
+            </Button>
           </Stack>
         </Paper>
 
         <Text size="xs" c="dimmed" ta="center" px="md">Партии сохраняются локально. Аккаунт для игры не нужен.</Text>
       </Stack>
     </Container>
+  );
+}
+
+function BoardSizeIllustration({ size }: { size: BoardSize }) {
+  const region = regionDimensions(size);
+  const blockRows = size / region.rows;
+  const blockCols = size / region.cols;
+  const count = blockRows * blockCols;
+  return (
+    <div
+      className="board-mode-art"
+      style={{ '--block-rows': blockRows, '--block-cols': blockCols } as CSSProperties}
+      aria-hidden="true"
+    >
+      {Array.from({ length: count }, (_, index) => <span key={index} />)}
+    </div>
+  );
+}
+
+function MiniResumeBoard() {
+  return (
+    <div className="resume-board-art" aria-hidden="true">
+      <span>7</span><span /><span>2</span>
+      <span /><span>5</span><span />
+      <span>3</span><span /><span>9</span>
+    </div>
   );
 }
 
@@ -140,4 +178,13 @@ function DuoIllustration() {
       <div className="duo-player duo-player-right"><IconUser size={18} stroke={2.2} /></div>
     </div>
   );
+}
+
+function difficultyDescription(value: Difficulty) {
+  if (value === 'easy') return 'Много стартовых символов и простые первые ходы.';
+  if (value === 'medium') return 'Спокойная партия без слишком длинных цепочек.';
+  if (value === 'hard') return 'Понадобятся заметки и внимательная проверка кандидатов.';
+  if (value === 'expert') return 'Мало очевидных ходов и больше продвинутой логики.';
+  if (value === 'legendary') return 'Для опытных игроков и длинных цепочек решений.';
+  return 'Максимальная плотность логики и минимум очевидных ходов.';
 }
