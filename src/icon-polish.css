@@ -3,9 +3,11 @@
   flex-shrink: 0;
 }
 
+/* Circular Mantine icon controls are centred by layout, not by SVG transforms.
+   Using transform-box/fill-box made visually asymmetric Tabler paths drift on
+   mobile Chrome even when the outer SVG box was technically centred. */
 .app-bg .mantine-ThemeIcon-root,
 .app-bg .mantine-ActionIcon-root {
-  position: relative !important;
   display: inline-grid !important;
   place-items: center !important;
   align-items: center !important;
@@ -15,47 +17,47 @@
   vertical-align: middle;
 }
 
-/* Dedicated circular icon wrappers use physical inset coordinates on purpose.
-   Do not mix left/top with inset-inline/inset-block: mobile Chrome resolves the
-   logical inset declarations later and can reset the physical coordinates. */
 .app-bg .mantine-ThemeIcon-root > svg,
 .app-bg .mantine-ActionIcon-root > svg {
-  position: absolute !important;
-  inset: 50% auto auto 50% !important;
+  position: static !important;
+  inset: auto !important;
   margin: 0 !important;
   translate: none !important;
-  transform: translate(-50%, -50%) !important;
-  transform-origin: center center !important;
-  transform-box: fill-box;
+  transform: none !important;
+  transform-box: view-box;
   display: block !important;
   flex: none !important;
+  place-self: center !important;
 }
 
-/* Mantine Alert has its own flex metrics. Give the icon a fixed geometry and
-   center the SVG independently of line-height, margins and writing mode. */
+/* Mantine Alert icon gets a fixed square/circle slot and the SVG is centred
+   inside that slot with grid. No absolute positioning = no optical drift. */
 .app-bg .mantine-Alert-icon {
-  position: relative !important;
   width: 36px !important;
   height: 36px !important;
   min-width: 36px !important;
   min-height: 36px !important;
   flex: 0 0 36px !important;
-  display: block !important;
+  display: grid !important;
+  place-items: center !important;
+  align-items: center !important;
+  justify-content: center !important;
   align-self: center !important;
   padding: 0 !important;
+  margin-block: 0 !important;
   line-height: 0 !important;
 }
 
 .app-bg .mantine-Alert-icon > svg {
-  position: absolute !important;
-  inset: 50% auto auto 50% !important;
+  position: static !important;
+  inset: auto !important;
   margin: 0 !important;
   translate: none !important;
-  transform: translate(-50%, -50%) !important;
-  transform-origin: center center !important;
-  transform-box: fill-box;
+  transform: none !important;
+  transform-box: view-box;
   display: block !important;
   flex: none !important;
+  place-self: center !important;
 }
 
 /* Inline button/menu sections remain normal flow; only normalize their SVG box. */
@@ -70,7 +72,8 @@
   position: static !important;
   vertical-align: middle !important;
   translate: none !important;
-  transform-box: fill-box;
+  transform: none !important;
+  transform-box: view-box;
   transform-origin: center;
 }
 
@@ -99,7 +102,6 @@
 
 .reference-game .reference-header-action,
 .reference-game .reference-tool {
-  position: relative !important;
   display: grid !important;
   place-items: center !important;
   align-items: center !important;
@@ -109,12 +111,13 @@
 
 .reference-game .reference-header-action > svg,
 .reference-game .reference-tool > svg {
-  position: absolute !important;
-  inset: 50% auto auto 50% !important;
+  position: static !important;
+  inset: auto !important;
   margin: 0 !important;
   translate: none !important;
-  transform: translate(-50%, -50%) !important;
-  transform-origin: center center !important;
+  transform: none !important;
+  transform-box: view-box;
+  place-self: center !important;
 }
 
 .reference-game .history-controls {
