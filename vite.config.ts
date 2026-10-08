@@ -26,7 +26,7 @@ function offlineServiceWorker(): Plugin {
 const APP_VERSION = '${APP_VERSION}';
 const CACHE = 'sudoku-duo-v${APP_VERSION}-${buildId}';
 const PRECACHE = ${JSON.stringify(precache)};
-const FORCE_REFRESH_LEGACY_CLIENTS = APP_VERSION === '1.2.0';
+const FORCE_REFRESH_LEGACY_CLIENTS = APP_VERSION === '1.3.0';
 
 self.addEventListener('install', (event) => {
   event.waitUntil((async () => {
@@ -64,15 +64,18 @@ self.addEventListener('message', (event) => {
     event.source?.postMessage({ type: 'APP_VERSION', version: APP_VERSION });
     return;
   }
-  if (event.data?.type === 'SKIP_WAITING') {
-    self.skipWaiting();
-  }
+  if (event.data?.type === 'SKIP_WAITING') self.skipWaiting();
 });
 
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   const url = new URL(event.request.url);
   if (url.origin !== self.location.origin) return;
+
+  if (url.pathname.endsWith('/version.json')) {
+    event.respondWith(fetch(event.request, { cache: 'no-store' }));
+    return;
+  }
 
   if (event.request.mode === 'navigate') {
     event.respondWith((async () => {
@@ -107,6 +110,7 @@ self.addEventListener('fetch', (event) => {
 });
 `;
       this.emitFile({ type: 'asset', fileName: 'sw.js', source });
+      this.emitFile({ type: 'asset', fileName: 'version.json', source: JSON.stringify({ version: APP_VERSION }) });
     },
   };
 }
