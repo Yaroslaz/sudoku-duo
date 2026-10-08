@@ -5,8 +5,8 @@ import { HomeScreen } from './components/HomeScreen';
 import { PairingScreen, type PairingResult } from './components/PairingScreen';
 import { RulesModal } from './components/RulesModal';
 import { applyGameAction, createGame, type GameAction } from './game/session';
-import { clearSavedGame, getDeviceId, getSavedName, loadGame, saveGame, saveName } from './game/storage';
-import type { Coordinate, Difficulty, GameSnapshot, Player } from './game/types';
+import { getDeviceId, getSavedColor, getSavedName, loadGame, saveColor, saveGame, saveName } from './game/storage';
+import type { BoardSize, Coordinate, Difficulty, GameSnapshot, Player, PlayerColor } from './game/types';
 import { PeerSession, type PeerRole, type PeerState } from './multiplayer/peer';
 import type { WireMessage } from './multiplayer/protocol';
 
@@ -15,29 +15,27 @@ const theme = createTheme({
   primaryShade: 6,
   defaultRadius: 'lg',
   fontFamily: 'Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-  headings: {
-    fontFamily: 'Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-    fontWeight: '760',
-  },
+  headings: { fontFamily: 'Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif', fontWeight: '760' },
 });
 
 type Screen = 'home' | 'pairing' | 'game';
-
 type RemoteCursor = { cell: Coordinate | null; notesMode: boolean } | null;
 
 export default function App() {
   const deviceId = useMemo(() => getDeviceId(), []);
   const [savedName, setSavedName] = useState(() => getSavedName());
+  const [savedColor, setSavedColor] = useState<PlayerColor>(() => getSavedColor());
   const [screen, setScreen] = useState<Screen>('home');
   const [rulesOpen, setRulesOpen] = useState(false);
   const [snapshot, setSnapshotState] = useState<GameSnapshot | null>(null);
   const [savedGame, setSavedGame] = useState<GameSnapshot | null>(() => loadGame());
   const [players, setPlayers] = useState<Player[]>([]);
-  const [localPlayer, setLocalPlayer] = useState<Player>({ id: deviceId, name: savedName || 'Ты', color: 'violet' });
+  const [localPlayer, setLocalPlayer] = useState<Player>({ id: deviceId, name: savedName || 'Ты', color: savedColor });
   const [role, setRole] = useState<PeerRole | 'solo'>('solo');
   const [peerState, setPeerState] = useState<PeerState | null>(null);
   const [latency, setLatency] = useState<number | null>(null);
   const [remoteCursor, setRemoteCursor] = useState<RemoteCursor>(null);
+  const [reconnectMode, setReconnectMode] = useState(false);
 
   const peerRef = useRef<PeerSession | null>(null);
   const snapshotRef = useRef<GameSnapshot | null>(null);
@@ -74,20 +72,23 @@ export default function App() {
   const hostApply = (action: GameAction, requestId: string) => {
     const current = snapshotRef.current;
     if (!current) return;
-    const canonicalAction: GameAction = action.type === 'pause' || action.type === 'resume'
-      ? { ...action, at: Date.now() }
-      : action;
+    const canonicalAction: GameAction = action.type === 'pause' || action.type === 'resume' ? { ...action, at: Date.now() } : action;
     const result = applyGameAction(current, canonicalAction);
     setSnapshot(result.snapshot);
     peerRef.current?.send({ type: 'canonical-action', action: canonicalAction, snapshot: result.snapshot, requestId });
   };
 
+  const pauseForConnectionLoss = () => {
+    const current = snapshotRef.current;
+    if (!current || current.completedAt || current.pausedAt !== null) return;
+    const action: GameAction = { type: 'pause', playerId: localPlayerRef.current.id, at: Date.now() };
+    setSnapshot(applyGameAction(current, action).snapshot);
+  };
+
   messageHandlerRef.current = (message: WireMessage) => {
     if (message.type === 'hello') {
       replaceOrAddPlayer(message.player);
-      if (roleRef.current === 'host' && snapshotRef.current) {
-        peerRef.current?.send({ type: 'snapshot', snapshot: snapshotRef.current, players: playersRef.current });
-      }
+      if (roleRef.current === 'host' && snapshotRef.current) peerRef.current?.send({ type: 'snapshot', snapshot: snapshotRef.current, players: playersRef.current });
       return;
     }
     if (message.type === 'snapshot') {
@@ -97,9 +98,7 @@ export default function App() {
       return;
     }
     if (message.type === 'request-snapshot') {
-      if (roleRef.current === 'host' && snapshotRef.current) {
-        peerRef.current?.send({ type: 'snapshot', snapshot: snapshotRef.current, players: playersRef.current });
-      }
+      if (roleRef.current === 'host' && snapshotRef.current) peerRef.current?.send({ type: 'snapshot', snapshot: snapshotRef.current, players: playersRef.current });
       return;
     }
     if (message.type === 'action') {
@@ -110,25 +109,23 @@ export default function App() {
       if (roleRef.current === 'guest') setSnapshot(message.snapshot);
       return;
     }
-    if (message.type === 'cursor') {
-      if (message.playerId !== localPlayerRef.current.id) setRemoteCursor({ cell: message.cell, notesMode: message.notesMode });
-    }
+    if (message.type === 'cursor' && message.playerId !== localPlayerRef.current.id) setRemoteCursor({ cell: message.cell, notesMode: message.notesMode });
   };
 
-  const startSolo = (difficulty: Difficulty) => {
+  const startSolo = (difficulty: Difficulty, size: BoardSize) => {
     peerRef.current?.close();
     peerRef.current = null;
     setPeerState(null);
     setLatency(null);
     setRemoteCursor(null);
-    const player: Player = { id: deviceId, name: savedName || 'Ты', color: 'violet' };
+    setReconnectMode(false);
+    const player: Player = { id: deviceId, name: savedName || 'Ты', color: savedColor };
     setLocalPlayer(player);
     setPlayers([player]);
     playersRef.current = [player];
     setRole('solo');
     roleRef.current = 'solo';
-    const game = createGame(difficulty, [player.id]);
-    setSnapshot(game);
+    setSnapshot(createGame(difficulty, [player.id], size));
     setScreen('game');
   };
 
@@ -137,11 +134,11 @@ export default function App() {
     if (!game) return;
     peerRef.current?.close();
     peerRef.current = null;
-    const player: Player = { id: deviceId, name: savedName || 'Ты', color: 'violet' };
+    const player: Player = { id: deviceId, name: savedName || 'Ты', color: savedColor };
     const knownIds = Object.keys(game.scores);
     const restoredPlayers: Player[] = knownIds.map((id, index) => id === deviceId
       ? player
-      : { id, name: index === 0 ? 'Друг' : `Игрок ${index + 1}`, color: 'coral' });
+      : { id, name: index === 0 ? 'Друг' : `Игрок ${index + 1}`, color: 'orange' });
     if (!restoredPlayers.some((p) => p.id === deviceId)) restoredPlayers.unshift(player);
     setLocalPlayer(player);
     setPlayers(restoredPlayers);
@@ -149,8 +146,24 @@ export default function App() {
     setRole('solo');
     roleRef.current = 'solo';
     setPeerState(null);
+    setReconnectMode(false);
     setSnapshot(game);
     setScreen('game');
+  };
+
+  const attachSessionCallbacks = (session: PeerSession, sessionRole: PeerRole) => {
+    session.setCallbacks({
+      onState: (state) => {
+        setPeerState(state);
+        if (state === 'disconnected' || state === 'failed') pauseForConnectionLoss();
+        if (state === 'connected') {
+          if (sessionRole === 'guest') session.send({ type: 'request-snapshot' });
+          else if (snapshotRef.current) session.send({ type: 'snapshot', snapshot: snapshotRef.current, players: playersRef.current });
+        }
+      },
+      onLatency: setLatency,
+      onMessage: (message) => messageHandlerRef.current(message),
+    });
   };
 
   const handlePairConnected = (result: PairingResult) => {
@@ -165,24 +178,19 @@ export default function App() {
     setPeerState('connected');
     setLatency(null);
     setRemoteCursor(null);
+    attachSessionCallbacks(result.session, result.role);
 
-    result.session.setCallbacks({
-      onState: (state) => {
-        setPeerState(state);
-        if (state === 'connected') {
-          if (result.role === 'guest') {
-            result.session.send({ type: 'request-snapshot' });
-          } else if (snapshotRef.current) {
-            result.session.send({ type: 'snapshot', snapshot: snapshotRef.current, players: playersRef.current });
-          }
-        }
-      },
-      onLatency: setLatency,
-      onMessage: (message) => messageHandlerRef.current(message),
-    });
+    if (reconnectMode) {
+      const current = snapshotRef.current;
+      if (result.role === 'host' && current) result.session.send({ type: 'snapshot', snapshot: current, players: nextPlayers });
+      else if (result.role === 'guest') result.session.send({ type: 'request-snapshot' });
+      setReconnectMode(false);
+      setScreen('game');
+      return;
+    }
 
     if (result.role === 'host') {
-      const game = createGame(result.difficulty ?? 'medium', nextPlayers.map((player) => player.id));
+      const game = createGame(result.difficulty ?? 'medium', nextPlayers.map((player) => player.id), result.size ?? 9);
       setSnapshot(game);
       result.session.send({ type: 'snapshot', snapshot: game, players: nextPlayers });
     } else {
@@ -200,16 +208,24 @@ export default function App() {
       return;
     }
     const requestId = crypto.randomUUID();
-    if (roleRef.current === 'host') {
-      hostApply(action, requestId);
-    } else {
-      peerRef.current?.send({ type: 'action', action, requestId });
-    }
+    if (roleRef.current === 'host') hostApply(action, requestId);
+    else peerRef.current?.send({ type: 'action', action, requestId });
   };
 
   const submitCursor = (cell: Coordinate | null, notesMode: boolean) => {
     if (roleRef.current === 'solo') return;
     peerRef.current?.send({ type: 'cursor', playerId: localPlayerRef.current.id, cell, notesMode });
+  };
+
+  const reconnect = () => {
+    pauseForConnectionLoss();
+    peerRef.current?.close();
+    peerRef.current = null;
+    setPeerState('disconnected');
+    setLatency(null);
+    setRemoteCursor(null);
+    setReconnectMode(true);
+    setScreen('pairing');
   };
 
   const leaveGame = () => {
@@ -218,6 +234,7 @@ export default function App() {
     setPeerState(null);
     setLatency(null);
     setRemoteCursor(null);
+    setReconnectMode(false);
     setSnapshot(null);
     setScreen('home');
     setSavedGame(loadGame());
@@ -228,24 +245,24 @@ export default function App() {
     saveName(name);
   };
 
+  const updateColor = (color: PlayerColor) => {
+    setSavedColor(color);
+    saveColor(color);
+  };
+
   return (
     <MantineProvider theme={theme} defaultColorScheme="light">
       <div className="app-bg">
-        {screen === 'home' && (
-          <HomeScreen
-            savedGame={savedGame}
-            onSolo={startSolo}
-            onMultiplayer={() => setScreen('pairing')}
-            onContinue={continueSaved}
-            onRules={() => setRulesOpen(true)}
-          />
-        )}
+        {screen === 'home' && <HomeScreen savedGame={savedGame} onSolo={startSolo} onMultiplayer={() => { setReconnectMode(false); setScreen('pairing'); }} onContinue={continueSaved} onRules={() => setRulesOpen(true)} />}
         {screen === 'pairing' && (
           <PairingScreen
             initialName={savedName}
+            initialColor={savedColor}
             deviceId={deviceId}
-            onBack={() => setScreen('home')}
+            reconnectMode={reconnectMode}
+            onBack={() => setScreen(reconnectMode ? 'game' : 'home')}
             onNameChange={updateName}
+            onColorChange={updateColor}
             onConnected={handlePairConnected}
           />
         )}
@@ -260,6 +277,7 @@ export default function App() {
             onAction={submitAction}
             onCursor={submitCursor}
             onLeave={leaveGame}
+            onReconnect={role === 'solo' ? undefined : reconnect}
           />
         )}
         <RulesModal opened={rulesOpen} onClose={() => setRulesOpen(false)} />
