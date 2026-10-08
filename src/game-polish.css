@@ -1,0 +1,319 @@
+html,
+body,
+#root {
+  overscroll-behavior-y: none !important;
+}
+
+.reference-game {
+  overscroll-behavior: none;
+}
+
+/* Two calm rows instead of four cramped columns. */
+.reference-game .reference-stats {
+  flex: 0 0 102px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 0;
+  padding: 0 8px 8px;
+}
+
+.reference-game .reference-stat {
+  min-width: 0;
+  min-height: 0;
+  padding: 8px 12px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: 12px;
+}
+
+.reference-game .reference-stat:nth-child(odd) {
+  border-inline-end: 1px solid #e1e4e9;
+}
+
+.reference-game .reference-stat:nth-child(-n + 2) {
+  border-bottom: 1px solid #e1e4e9;
+}
+
+.reference-game .reference-stat:first-child {
+  padding-inline-start: 12px;
+}
+
+.reference-game .reference-stat-label {
+  font-size: clamp(.72rem, 3vw, .9rem);
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+.reference-game .reference-stat-value,
+.reference-game .reference-score-value,
+.reference-game .reference-time-stat .timer {
+  margin: 0;
+  min-width: 0;
+  text-align: end;
+  font-size: clamp(.95rem, 4.1vw, 1.28rem);
+  line-height: 1;
+  white-space: nowrap;
+  overflow: visible;
+  text-overflow: clip;
+  font-variant-numeric: tabular-nums;
+}
+
+.reference-game .reference-score-value {
+  font-size: clamp(.84rem, 3.7vw, 1.18rem);
+}
+
+.reference-game .reference-time-stat {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding-inline-end: 6px;
+}
+
+.reference-game .reference-time-copy {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: 12px;
+}
+
+/* The board owns touch gestures, so Android does not turn an eraser drag into pull-to-refresh. */
+.reference-game .sudoku-board {
+  touch-action: none !important;
+  overscroll-behavior: none;
+  -webkit-user-select: none;
+  user-select: none;
+  width: min(calc(100vw - 16px), 680px, calc(100dvh - 316px));
+}
+
+.reference-game.hint-mode-active .sudoku-board {
+  width: min(calc(100vw - 16px), 680px, calc(100dvh - 378px));
+}
+
+/* Hint stays in the page flow and never covers the puzzle. */
+.reference-game .inline-hint {
+  flex: 0 0 auto;
+  min-height: 58px;
+  margin: 0 8px 6px;
+  padding: 7px 2px 7px 8px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 7px;
+  border-top: 1px solid #e4e7eb;
+  border-bottom: 1px solid #e4e7eb;
+  background: #fffdf6;
+}
+
+.reference-game .inline-hint-icon {
+  color: #c58b12;
+  flex: 0 0 auto;
+}
+
+.reference-game .inline-hint-copy {
+  min-width: 0;
+}
+
+.reference-game .inline-hint-title {
+  color: #263142;
+  font-size: clamp(.78rem, 3.2vw, .92rem);
+  line-height: 1.18;
+  text-wrap: pretty;
+}
+
+.reference-game .inline-hint-text {
+  margin-top: 2px;
+  color: #7b8190;
+  font-size: clamp(.7rem, 2.85vw, .82rem);
+  line-height: 1.2;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+.reference-game .inline-hint-action {
+  flex: 0 0 auto;
+}
+
+/* Tool states: no large bubble, just icon color + a small persistent marker. */
+.reference-game .reference-tool {
+  position: relative;
+  border-radius: 10px !important;
+  color: #7d8492 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.reference-game .reference-tool:not(:disabled):active {
+  color: #4d6079 !important;
+  background: #eef2f6 !important;
+  transform: scale(.94);
+}
+
+.reference-game .reference-tool[aria-pressed='true'] {
+  color: #2f69ad !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.reference-game .reference-tool[aria-pressed='true']::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 1px;
+  width: 20px;
+  height: 3px;
+  border-radius: 999px;
+  background: #2f69ad;
+  transform: translateX(-50%);
+}
+
+.reference-game .reference-tool:nth-child(3)[aria-pressed='true'] {
+  color: #bd8614 !important;
+}
+
+.reference-game .reference-tool:nth-child(3)[aria-pressed='true']::after {
+  background: #d69b20;
+}
+
+/* Controls sit close enough to the board, but not on the system gesture area. */
+.reference-game .controls-section {
+  padding: clamp(12px, 2.2dvh, 22px) 0 max(18px, var(--safe-bottom));
+}
+
+.reference-game .tool-row {
+  min-height: 52px;
+  padding-inline: 12%;
+}
+
+/* Number glyph has a fixed center. Notes change scale/background, never position. */
+.reference-game .number-button {
+  height: clamp(54px, 7.2dvh, 66px) !important;
+  display: grid;
+  place-items: center;
+}
+
+.reference-game .number-glyph {
+  width: min(100%, 46px);
+  aspect-ratio: 1;
+  height: auto;
+  margin: auto;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  font-size: clamp(1.95rem, 8.1vw, 3rem);
+  line-height: 1;
+  transform: none !important;
+  transform-origin: center;
+  background-color: transparent;
+  background-image: none;
+  transition: font-size 150ms ease-out, background-color 150ms ease-out, color 150ms ease-out, box-shadow 150ms ease-out;
+}
+
+.reference-game .number-button.note-number .number-glyph {
+  font-size: clamp(1.3rem, 5.4vw, 1.85rem);
+  transform: none !important;
+  background-image:
+    linear-gradient(to right, transparent 32%, rgba(49, 106, 177, .14) 33%, rgba(49, 106, 177, .14) 35%, transparent 36%, transparent 65%, rgba(49, 106, 177, .14) 66%, rgba(49, 106, 177, .14) 68%, transparent 69%),
+    linear-gradient(to bottom, transparent 32%, rgba(49, 106, 177, .14) 33%, rgba(49, 106, 177, .14) 35%, transparent 36%, transparent 65%, rgba(49, 106, 177, .14) 66%, rgba(49, 106, 177, .14) 68%, transparent 69%);
+}
+
+.reference-game .number-button:not(:disabled):active .number-glyph {
+  width: min(100%, 46px);
+  height: auto;
+  margin: auto;
+  transform: scale(.94) !important;
+  background-color: #e7eef7;
+  color: #285f9f;
+}
+
+.reference-game .number-button.locked .number-glyph {
+  width: min(100%, 46px);
+  height: auto;
+  margin: auto;
+  border-radius: 50%;
+  background-color: #316ab1;
+  background-image: none;
+  color: #fff;
+  font-size: clamp(1.55rem, 6.7vw, 2.35rem);
+}
+
+.reference-game .number-button.locked.note-number .number-glyph {
+  font-size: clamp(1.25rem, 5.2vw, 1.7rem);
+  background-color: #316ab1;
+  background-image:
+    linear-gradient(to right, transparent 32%, rgba(255,255,255,.22) 33%, rgba(255,255,255,.22) 35%, transparent 36%, transparent 65%, rgba(255,255,255,.22) 66%, rgba(255,255,255,.22) 68%, transparent 69%),
+    linear-gradient(to bottom, transparent 32%, rgba(255,255,255,.22) 33%, rgba(255,255,255,.22) 35%, transparent 36%, transparent 65%, rgba(255,255,255,.22) 66%, rgba(255,255,255,.22) 68%, transparent 69%);
+}
+
+.reference-game .number-button.locked:active .number-glyph {
+  background-color: #285f9f;
+  color: #fff;
+}
+
+@media (max-width: 390px) {
+  .reference-game .reference-stats {
+    flex-basis: 96px;
+    padding-inline: 5px;
+  }
+
+  .reference-game .reference-stat {
+    padding: 7px 8px;
+    column-gap: 8px;
+  }
+
+  .reference-game .reference-stat-label {
+    font-size: .7rem;
+  }
+
+  .reference-game .reference-stat-value,
+  .reference-game .reference-time-stat .timer {
+    font-size: .92rem;
+  }
+
+  .reference-game .reference-score-value {
+    font-size: .78rem;
+  }
+}
+
+@media (max-height: 720px) {
+  .reference-game .reference-stats {
+    flex-basis: 88px;
+  }
+
+  .reference-game .reference-stat {
+    padding-block: 5px;
+  }
+
+  .reference-game .sudoku-board {
+    width: min(calc(100vw - 16px), 680px, calc(100dvh - 280px));
+  }
+
+  .reference-game.hint-mode-active .sudoku-board {
+    width: min(calc(100vw - 16px), 680px, calc(100dvh - 336px));
+  }
+
+  .reference-game .controls-section {
+    padding-top: 8px;
+    padding-bottom: max(10px, var(--safe-bottom));
+  }
+
+  .reference-game .tool-row {
+    min-height: 44px;
+  }
+
+  .reference-game .number-button {
+    height: 44px !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reference-game .number-glyph {
+    transition-duration: .01ms !important;
+  }
+}
