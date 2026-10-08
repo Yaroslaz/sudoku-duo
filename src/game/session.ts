@@ -20,6 +20,9 @@ export type ActionResult = {
   failed?: boolean;
 };
 
+const CELL_RACE_WINDOW_MS = 1_200;
+const recentCellWrites = new Map<string, { playerId: string; at: number }>();
+
 export function createGame(
   difficulty: Difficulty,
   playerIds: string[],
@@ -65,6 +68,29 @@ function totalMistakes(snapshot: GameSnapshot) {
   return Object.values(snapshot.scores).reduce((total, score) => total + score.mistakes, 0);
 }
 
+function raceKey(snapshot: GameSnapshot, row: number, col: number) {
+  return `${snapshot.id}:${row}:${col}`;
+}
+
+function isConcurrentWriteBlocked(snapshot: GameSnapshot, action: Extract<GameAction, { row: number; col: number }>, now: number) {
+  if (Object.keys(snapshot.scores).length < 2) return false;
+  const previous = recentCellWrites.get(raceKey(snapshot, action.row, action.col));
+  if (!previous || previous.playerId === action.playerId) return false;
+  const delta = now - previous.at;
+  return delta >= 0 && delta <= CELL_RACE_WINDOW_MS;
+}
+
+function rememberCellWrite(snapshot: GameSnapshot, action: Extract<GameAction, { row: number; col: number }>, now: number) {
+  recentCellWrites.set(raceKey(snapshot, action.row, action.col), { playerId: action.playerId, at: now });
+
+  if (recentCellWrites.size > 300) {
+    const cutoff = now - 10_000;
+    for (const [key, value] of recentCellWrites) {
+      if (value.at < cutoff) recentCellWrites.delete(key);
+    }
+  }
+}
+
 export function applyGameAction(snapshot: GameSnapshot, action: GameAction, now = Date.now()): ActionResult {
   const next: GameSnapshot = {
     ...snapshot,
@@ -98,6 +124,7 @@ export function applyGameAction(snapshot: GameSnapshot, action: GameAction, now 
   if (action.type === 'undo' || action.type === 'redo') return { snapshot, accepted: false };
 
   if (next.pausedAt !== null || !editable(next, action.row, action.col)) return { snapshot, accepted: false };
+  if (isConcurrentWriteBlocked(snapshot, action, now)) return { snapshot, accepted: false };
 
   if (action.type === 'note') {
     if (next.board[action.row][action.col] !== 0 || action.digit < 1 || action.digit > next.size) return { snapshot, accepted: false };
@@ -105,12 +132,14 @@ export function applyGameAction(snapshot: GameSnapshot, action: GameAction, now 
     next.notes[action.row][action.col] = cell.includes(action.digit)
       ? cell.filter((digit) => digit !== action.digit)
       : [...cell, action.digit].sort((a, b) => a - b);
+    rememberCellWrite(snapshot, action, now);
     return { snapshot: next, accepted: true };
   }
 
   if (action.type === 'clear') {
     next.board[action.row][action.col] = 0;
     next.notes[action.row][action.col] = [];
+    rememberCellWrite(snapshot, action, now);
     return { snapshot: next, accepted: true };
   }
 
@@ -131,6 +160,7 @@ export function applyGameAction(snapshot: GameSnapshot, action: GameAction, now 
   }
 
   if (correct) next.notes = removePeerNotes(next.notes, action.row, action.col, action.digit);
+  rememberCellWrite(snapshot, action, now);
 
   if (!correct && firstScoredAttempt && next.mistakeLimit !== null && totalMistakes(next) >= next.mistakeLimit) {
     next.failedAt = now;
