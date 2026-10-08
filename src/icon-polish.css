@@ -9,18 +9,17 @@
   vertical-align: middle;
 }
 
-.app-bg .mantine-ThemeIcon-root > svg,
-.app-bg .mantine-ActionIcon-root > svg,
-.app-bg .mantine-Button-section > svg,
-.app-bg .mantine-Alert-icon > svg,
+.app-bg :where(.mantine-ThemeIcon-root, .mantine-ActionIcon-root, .mantine-Button-section, .mantine-Alert-icon) svg,
 .app-bg button > svg,
-.app-bg [role='button'] > svg {
+.app-bg [role='button'] > svg,
+.app-bg svg.tabler-icon {
   display: block !important;
   flex: 0 0 auto !important;
-  margin: 0 !important;
+  margin: auto !important;
   position: static !important;
   inset: auto !important;
   vertical-align: middle !important;
+  translate: none !important;
   transform-box: fill-box;
   transform-origin: center;
 }
@@ -59,7 +58,7 @@
 .reference-game .reference-header-action > svg,
 .reference-game .reference-tool > svg {
   position: static !important;
-  margin: 0 !important;
+  margin: auto !important;
 }
 
 .pairing-screen .mantine-Alert-icon {
