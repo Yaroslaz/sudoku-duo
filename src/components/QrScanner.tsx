@@ -1,52 +1,65 @@
-import { Alert, Button, Paper, Stack, Text, TextInput } from '@mantine/core';
+import { Alert, Button, Paper, Stack, Text, Textarea } from '@mantine/core';
 import { BrowserQRCodeReader, type IScannerControls } from '@zxing/browser';
-import { useEffect, useRef, useState } from 'react';
-import { formatRoomCode, isRoomCode, normalizeRoomCode } from '../multiplayer/signaling';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { copyCodeToSignal, FrameAssembler, type SignalPayload } from '../multiplayer/signaling';
 
-export function QrScanner({ onCode }: { onCode: (code: string) => void }) {
+export function QrScanner({ onSignal, expectedKind }: { onSignal: (signal: SignalPayload) => void; expectedKind: 'offer' | 'answer' }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const controlsRef = useRef<IScannerControls | null>(null);
+  const assembler = useMemo(() => new FrameAssembler(), []);
   const [error, setError] = useState('');
+  const [manualOpen, setManualOpen] = useState(false);
   const [manual, setManual] = useState('');
 
   useEffect(() => {
     let stopped = false;
-    const reader = new BrowserQRCodeReader(undefined, { delayBetweenScanAttempts: 120, delayBetweenScanSuccess: 400 });
+    const reader = new BrowserQRCodeReader(undefined, { delayBetweenScanAttempts: 100, delayBetweenScanSuccess: 300 });
+
     const start = async () => {
       try {
         controlsRef.current = await reader.decodeFromConstraints(
           { video: { facingMode: { ideal: 'environment' } }, audio: false },
           videoRef.current!,
-          (result) => {
+          async (result) => {
             if (!result || stopped) return;
-            const code = normalizeRoomCode(result.getText());
-            if (!isRoomCode(code)) {
-              setError('Это не код комнаты Sudoku duo');
-              return;
+            try {
+              const assembled = await assembler.add(result.getText());
+              if (!assembled.payload) {
+                setError('Это не QR соединения Sudoku duo');
+                return;
+              }
+              if (assembled.payload.kind !== expectedKind) throw new Error('Это QR другого шага подключения');
+              controlsRef.current?.stop();
+              onSignal(assembled.payload);
+            } catch (scanError) {
+              setError(scanError instanceof Error ? scanError.message : 'Не удалось прочитать QR');
             }
-            controlsRef.current?.stop();
-            onCode(code);
           },
         );
       } catch {
-        setError('Не удалось открыть камеру. Введи короткий код комнаты ниже.');
+        setError('Не удалось открыть камеру. Разреши доступ к камере или вставь резервный код вручную.');
       }
     };
+
     if (videoRef.current) void start();
     return () => {
       stopped = true;
       controlsRef.current?.stop();
       controlsRef.current = null;
+      assembler.reset();
     };
-  }, [onCode]);
+  }, [assembler, expectedKind, onSignal]);
 
-  const applyManual = () => {
-    const code = normalizeRoomCode(manual);
-    if (!isRoomCode(code)) {
-      setError('Введи все 6 символов кода');
-      return;
+  const applyManual = async () => {
+    setError('');
+    try {
+      const signal = await copyCodeToSignal(manual);
+      if (signal.kind !== expectedKind) throw new Error('Это код другого шага подключения');
+      controlsRef.current?.stop();
+      onSignal(signal);
+    } catch (manualError) {
+      setError(manualError instanceof Error ? manualError.message : 'Не удалось прочитать код');
     }
-    onCode(code);
   };
 
   return (
@@ -55,23 +68,20 @@ export function QrScanner({ onCode }: { onCode: (code: string) => void }) {
         <video ref={videoRef} className="scanner-video" muted playsInline />
         <div className="scanner-frame" aria-hidden="true" />
       </Paper>
-      <Stack gap="xs">
-        <Text size="sm" fw={650}>Или введи код</Text>
-        <TextInput
-          value={formatRoomCode(manual)}
-          onChange={(event: { currentTarget: HTMLInputElement }) => setManual(normalizeRoomCode(event.currentTarget.value))}
-          placeholder="m7k-4qp"
-          size="lg"
-          radius="lg"
-          maxLength={7}
-          autoCapitalize="none"
-          autoCorrect="off"
-          inputMode="text"
-          className="room-code-input"
-        />
-        <Button onClick={applyManual} disabled={!isRoomCode(manual)} radius="xl" size="md">Подключиться</Button>
-      </Stack>
+
       {error && <Alert color="red" radius="lg">{error}</Alert>}
+
+      <Button variant="subtle" radius="xl" onClick={() => setManualOpen((value) => !value)}>
+        {manualOpen ? 'Скрыть ручной ввод' : 'QR не читается — вставить код'}
+      </Button>
+
+      {manualOpen && (
+        <Stack gap="xs">
+          <Text size="sm" c="dimmed">На другом телефоне нажми «Скопировать резервный код» и передай его любым локальным способом.</Text>
+          <Textarea value={manual} onChange={(event) => setManual(event.currentTarget.value)} minRows={3} autosize placeholder="Вставь резервный код" />
+          <Button radius="xl" onClick={() => void applyManual()} disabled={!manual.trim()}>Применить код</Button>
+        </Stack>
+      )}
     </Stack>
   );
 }
