@@ -7,7 +7,7 @@ import type { BoardSize, Digit } from '../game/types';
 const LONG_PRESS_MS = 360;
 const MOVE_CANCEL_PX = 8;
 
-export function NumberPad({ size, notesMode, eraserMode, hintActive, disabled, remaining, lockedDigit, onDigit, onToggleNotes, onToggleEraser, onHint, onLockDigit }: {
+export function NumberPad({ size, notesMode, eraserMode, hintActive, disabled, remaining, lockedDigit, onDigit, onToggleNotes, onToggleEraser, onEraseSelected, onHint, onLockDigit }: {
   size: BoardSize;
   notesMode: boolean;
   eraserMode: boolean;
@@ -18,6 +18,7 @@ export function NumberPad({ size, notesMode, eraserMode, hintActive, disabled, r
   onDigit: (digit: Digit) => void;
   onToggleNotes: () => void;
   onToggleEraser: () => void;
+  onEraseSelected: () => void;
   onHint: () => void;
   onLockDigit: (digit: Digit | null) => void;
 }) {
@@ -25,6 +26,9 @@ export function NumberPad({ size, notesMode, eraserMode, hintActive, disabled, r
   const heldDigit = useRef<Digit | null>(null);
   const longPressFired = useRef(false);
   const holdStart = useRef<{ x: number; y: number } | null>(null);
+  const eraserTimer = useRef<number | null>(null);
+  const eraserLongPressFired = useRef(false);
+  const eraserStart = useRef<{ x: number; y: number } | null>(null);
   const previousRemaining = useRef<Record<number, number>>({ ...remaining });
   const [burst, setBurst] = useState<{ digit: Digit; id: number } | null>(null);
 
@@ -50,6 +54,14 @@ export function NumberPad({ size, notesMode, eraserMode, hintActive, disabled, r
     holdStart.current = null;
   };
 
+  const clearEraserHold = () => {
+    if (eraserTimer.current !== null) {
+      window.clearTimeout(eraserTimer.current);
+      eraserTimer.current = null;
+    }
+    eraserStart.current = null;
+  };
+
   const startHold = (digit: Digit, x: number, y: number) => {
     clearHold();
     heldDigit.current = digit;
@@ -69,6 +81,24 @@ export function NumberPad({ size, notesMode, eraserMode, hintActive, disabled, r
     if (Math.hypot(dx, dy) > MOVE_CANCEL_PX) clearHold();
   };
 
+  const startEraserHold = (x: number, y: number) => {
+    clearEraserHold();
+    eraserLongPressFired.current = false;
+    eraserStart.current = { x, y };
+    eraserTimer.current = window.setTimeout(() => {
+      eraserLongPressFired.current = true;
+      onToggleEraser();
+      if ('vibrate' in navigator) navigator.vibrate?.(18);
+    }, LONG_PRESS_MS);
+  };
+
+  const cancelEraserIfMoved = (x: number, y: number) => {
+    if (!eraserStart.current) return;
+    const dx = x - eraserStart.current.x;
+    const dy = y - eraserStart.current.y;
+    if (Math.hypot(dx, dy) > MOVE_CANCEL_PX) clearEraserHold();
+  };
+
   const handleDigitClick = (digit: Digit) => {
     if (longPressFired.current && heldDigit.current === digit) {
       longPressFired.current = false;
@@ -78,10 +108,36 @@ export function NumberPad({ size, notesMode, eraserMode, hintActive, disabled, r
     onDigit(digit);
   };
 
+  const handleEraserClick = () => {
+    if (eraserLongPressFired.current) {
+      eraserLongPressFired.current = false;
+      return;
+    }
+    onEraseSelected();
+  };
+
   return (
     <Stack gap={10} className={`number-pad-wrap ${notesMode ? 'notes-active' : ''}`}>
       <Group justify="space-around" gap={0} className="tool-row">
-        <ActionIcon variant="subtle" color={eraserMode ? 'indigo' : 'gray'} radius="md" size={52} onClick={onToggleEraser} disabled={disabled} aria-pressed={eraserMode} aria-label={eraserMode ? 'Выключить ластик' : 'Включить ластик'} className="reference-tool pressable-control"><IconEraser size={30} stroke={1.75} /></ActionIcon>
+        <ActionIcon
+          variant="subtle"
+          color={eraserMode ? 'indigo' : 'gray'}
+          radius="md"
+          size={52}
+          onClick={handleEraserClick}
+          onPointerDown={(event) => startEraserHold(event.clientX, event.clientY)}
+          onPointerMove={(event) => cancelEraserIfMoved(event.clientX, event.clientY)}
+          onPointerUp={clearEraserHold}
+          onPointerCancel={clearEraserHold}
+          onPointerLeave={clearEraserHold}
+          onContextMenu={(event) => event.preventDefault()}
+          disabled={disabled}
+          aria-pressed={eraserMode}
+          aria-label={eraserMode ? 'Ластик закреплён. Удерживай, чтобы выключить' : 'Стереть выбранную клетку. Удерживай, чтобы закрепить ластик'}
+          className="reference-tool pressable-control"
+        >
+          <IconEraser size={30} stroke={1.75} />
+        </ActionIcon>
         <ActionIcon variant="subtle" color={notesMode ? 'indigo' : 'gray'} radius="md" size={52} className="reference-tool pressable-control" onClick={onToggleNotes} disabled={disabled} aria-pressed={notesMode} aria-label={notesMode ? 'Выключить заметки' : 'Включить заметки'}><IconPencil size={29} stroke={1.75} /></ActionIcon>
         <ActionIcon variant="subtle" color={hintActive ? 'yellow' : 'gray'} radius="md" size={52} onClick={onHint} disabled={disabled} aria-pressed={hintActive} aria-label="Показать подсказку" className="reference-tool pressable-control"><IconBulb size={30} stroke={1.75} /></ActionIcon>
       </Group>

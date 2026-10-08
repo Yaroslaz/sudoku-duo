@@ -172,6 +172,11 @@ export function GameScreen({
     onAction({ type: 'clear', playerId: localPlayer.id, row, col });
   };
 
+  const eraseSelected = () => {
+    if (!selected) return;
+    eraseCell(selected.row, selected.col);
+  };
+
   const askHint = () => {
     setEraserMode(false);
     const found = findHint(snapshot.board);
@@ -258,10 +263,10 @@ export function GameScreen({
           solution={snapshot.solution}
           notes={snapshot.notes}
           selected={selected}
-          localColor={localPlayer.color}
           remoteSelected={remoteCursor?.cell ?? null}
           remoteColor={remotePlayer?.color ?? null}
           hint={hintOpen ? hint : null}
+          hintStep={hintStep}
           notesMode={notesMode}
           eraserMode={eraserMode}
           lockedDigit={lockedDigit}
@@ -283,6 +288,7 @@ export function GameScreen({
           onDigit={digit}
           onToggleNotes={toggleNotes}
           onToggleEraser={toggleEraser}
+          onEraseSelected={eraseSelected}
           onHint={askHint}
           onLockDigit={changeLockedDigit}
         />
@@ -357,9 +363,74 @@ export function GameScreen({
 
 function HintStepContent({ hint, step, size }: { hint: Hint; step: number; size: GameSnapshot['size'] }) {
   const symbol = symbolForDigit(hint.digit);
-  if (step === 0) return <Stack gap={4}><Text fw={700}>Поставь {symbol}</Text><Text size="sm" c="dimmed">{hintSummary(hint)}</Text></Stack>;
-  if (step === 1) return <Stack gap={4}><Text fw={700}>Похожий пример</Text><Text size="sm" c="dimmed">{hintExample(hint)}</Text></Stack>;
-  return <Stack gap={4}><Text fw={700}>Почему это работает</Text><Text size="sm" c="dimmed">{hintRule(hint, size)}</Text></Stack>;
+  if (step === 0) {
+    return (
+      <Stack gap={4}>
+        <Text fw={700}>Поставь {symbol}</Text>
+        <Text size="sm" c="dimmed">{hintSummary(hint)}</Text>
+        <Text size="xs" className="hint-live-guide">{hintLiveGuide(hint)}</Text>
+      </Stack>
+    );
+  }
+  if (step === 1) {
+    return (
+      <Stack gap={8}>
+        <Text fw={700}>Похожий пример</Text>
+        <HintExampleDiagram hint={hint} />
+        <Text size="sm" c="dimmed">{hintExample(hint)}</Text>
+      </Stack>
+    );
+  }
+  return (
+    <Stack gap={7}>
+      <Text fw={700}>Почему это работает</Text>
+      <RuleDiagram hint={hint} />
+      <Text size="sm" c="dimmed">{hintRule(hint, size)}</Text>
+    </Stack>
+  );
+}
+
+function HintExampleDiagram({ hint }: { hint: Hint }) {
+  const symbol = symbolForDigit(hint.digit);
+  if (hint.kind === 'hidden-single-row') {
+    return <div className="hint-example hint-example-row" aria-hidden="true">{['×', '×', symbol, '×', '×'].map((value, index) => <span key={index} className={index === 2 ? 'target' : 'blocked'}>{value}</span>)}</div>;
+  }
+  if (hint.kind === 'hidden-single-column') {
+    return <div className="hint-example hint-example-column" aria-hidden="true">{['×', '×', symbol, '×', '×'].map((value, index) => <span key={index} className={index === 2 ? 'target' : 'blocked'}>{value}</span>)}</div>;
+  }
+  if (hint.kind === 'hidden-single-box') {
+    return <div className="hint-example hint-example-box" aria-hidden="true">{Array.from({ length: 9 }, (_, index) => <span key={index} className={index === 4 ? 'target' : 'blocked'}>{index === 4 ? symbol : '×'}</span>)}</div>;
+  }
+  const eliminated = hint.eliminated.slice(0, 8).map(symbolForDigit);
+  return (
+    <div className="hint-example hint-example-box" aria-hidden="true">
+      {Array.from({ length: 9 }, (_, index) => {
+        if (index === 4) return <span key={index} className="target">{symbol}</span>;
+        const source = eliminated[index < 4 ? index : index - 1] ?? '×';
+        return <span key={index} className="source">{source}</span>;
+      })}
+    </div>
+  );
+}
+
+function RuleDiagram({ hint }: { hint: Hint }) {
+  const symbol = symbolForDigit(hint.digit);
+  return (
+    <div className="hint-rule-diagram" aria-hidden="true">
+      <span className="rule-row">строка</span>
+      <span className="rule-column">столбец</span>
+      <span className="rule-box">блок</span>
+      <strong>{symbol}</strong>
+    </div>
+  );
+}
+
+function hintLiveGuide(hint: Hint) {
+  const symbol = symbolForDigit(hint.digit);
+  if (hint.kind === 'naked-single') return 'На поле подсвечены клетки, цифры которых исключают остальные варианты.';
+  if (hint.kind === 'hidden-single-row') return `Подсвечена нужная строка. На следующем шаге видно, какие ${symbol} блокируют остальные позиции.`;
+  if (hint.kind === 'hidden-single-column') return `Подсвечен нужный столбец. На следующем шаге видно, какие ${symbol} блокируют остальные позиции.`;
+  return `Подсвечен нужный блок. На следующем шаге видно, какие ${symbol} закрывают остальные клетки.`;
 }
 
 function hintSummary(hint: Hint) {
@@ -371,10 +442,10 @@ function hintSummary(hint: Hint) {
 }
 
 function hintExample(hint: Hint) {
-  if (hint.kind === 'naked-single') return 'Например, у клетки остаются несколько кандидатов, но строка, столбец и блок постепенно исключают все варианты кроме одного.';
-  if (hint.kind === 'hidden-single-row') return 'В строке может быть несколько пустых клеток, но нужный символ допускается только в одной из них.';
-  if (hint.kind === 'hidden-single-column') return 'То же работает по вертикали: если символ может появиться только в одной клетке столбца, его можно поставить туда сразу.';
-  return 'Просмотри все клетки одного блока: строки и столбцы исключают позиции, пока для нужного символа не останется единственное место.';
+  if (hint.kind === 'naked-single') return 'В центре остаётся единственный вариант. Цифры вокруг показывают уже исключённые кандидаты.';
+  if (hint.kind === 'hidden-single-row') return 'В строке несколько пустых мест, но четыре позиции уже закрыты ограничениями. Остаётся одна клетка для нужного символа.';
+  if (hint.kind === 'hidden-single-column') return 'То же по вертикали: ограничения закрывают остальные позиции столбца, поэтому символ ставится в единственную свободную точку.';
+  return 'Внутри блока остальные клетки недоступны для этого символа, поэтому центральная подсвеченная клетка становится единственным местом.';
 }
 
 function hintRule(hint: Hint, size: GameSnapshot['size']) {

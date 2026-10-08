@@ -1,6 +1,6 @@
 import { memo, useMemo, useRef, type CSSProperties, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import { playerColorHex } from '../game/playerColors';
-import { regionId, symbolForDigit } from '../game/engine';
+import { candidates, regionCells, regionId, symbolForDigit } from '../game/engine';
 import type { Board, BoardSize, Coordinate, Digit, Hint, NotesGrid, PlayerColor } from '../game/types';
 
 type PaintMode = 'add' | 'erase';
@@ -11,10 +11,10 @@ export const SudokuBoard = memo(function SudokuBoard({
   solution,
   notes,
   selected,
-  localColor,
   remoteSelected,
   remoteColor,
   hint,
+  hintStep,
   notesMode,
   eraserMode,
   lockedDigit,
@@ -27,10 +27,10 @@ export const SudokuBoard = memo(function SudokuBoard({
   solution: Board;
   notes: NotesGrid;
   selected: Coordinate | null;
-  localColor?: PlayerColor | null;
   remoteSelected: Coordinate | null;
   remoteColor?: PlayerColor | null;
   hint: Hint | null;
+  hintStep: number;
   notesMode: boolean;
   eraserMode: boolean;
   lockedDigit: Digit | null;
@@ -45,15 +45,43 @@ export const SudokuBoard = memo(function SudokuBoard({
   const paintMode = useRef<PaintMode>('add');
   const paintedCells = useRef(new Set<string>());
   const activePointer = useRef<number | null>(null);
-  const selectedValue = eraserMode ? 0 : lockedDigit ?? (selected ? board[selected.row][selected.col] : 0);
+  const selectedValue = notesMode && lockedDigit ? lockedDigit : 0;
   const noteColumns = Math.ceil(Math.sqrt(size));
   const noteRows = Math.ceil(size / noteColumns);
   const hintRelated = useMemo(() => new Set(hint?.related.map((cell) => `${cell.row}:${cell.col}`) ?? []), [hint]);
 
-  const relatedToSelection = (row: number, col: number) => {
-    if (!selected) return false;
-    return row === selected.row || col === selected.col || regionId(size, row, col) === regionId(size, selected.row, selected.col);
-  };
+  const teaching = useMemo(() => {
+    const blocked = new Set<string>();
+    const sources = new Set<string>();
+    if (!hint) return { blocked, sources };
+
+    const addDigitSourcesForCell = (row: number, col: number, digit: Digit) => {
+      for (let index = 0; index < size; index += 1) {
+        if (board[row][index] === digit) sources.add(`${row}:${index}`);
+        if (board[index][col] === digit) sources.add(`${index}:${col}`);
+      }
+      for (const cell of regionCells(size, row, col)) {
+        if (board[cell.row][cell.col] === digit) sources.add(`${cell.row}:${cell.col}`);
+      }
+    };
+
+    if (hint.kind === 'naked-single') {
+      for (const cell of hint.related) {
+        const value = board[cell.row][cell.col];
+        if (value && hint.eliminated.includes(value)) sources.add(`${cell.row}:${cell.col}`);
+      }
+      return { blocked, sources };
+    }
+
+    for (const cell of hint.related) {
+      if (board[cell.row][cell.col] !== 0) continue;
+      if (!candidates(board, cell.row, cell.col).includes(hint.digit)) {
+        blocked.add(`${cell.row}:${cell.col}`);
+        addDigitSourcesForCell(cell.row, cell.col, hint.digit);
+      }
+    }
+    return { blocked, sources };
+  }, [board, hint, size]);
 
   const shouldAffectDigitCell = (row: number, col: number) => {
     if (!lockedDigit || puzzle[row][col] !== 0) return false;
@@ -138,12 +166,12 @@ export const SudokuBoard = memo(function SudokuBoard({
 
   const boardStyle = {
     '--board-size': size,
-    '--local-color': localColor ? playerColorHex[localColor] : '#3174b8',
+    '--local-color': '#3174b8',
     '--remote-color': remoteColor ? playerColorHex[remoteColor] : '#e38445',
   } as CSSProperties;
 
   return (
-    <div ref={boardRef} className={`sudoku-board size-${size} ${notesMode ? 'notes-mode' : ''} ${lockedDigit ? 'paint-mode' : ''} ${eraserMode ? 'eraser-mode' : ''}`} style={boardStyle} role="grid" aria-label={eraserMode ? 'Поле судоку. Включён ластик' : lockedDigit ? `Поле судоку. Закреплён символ ${symbolForDigit(lockedDigit)}` : 'Поле судоку'} onPointerMove={movePaint} onPointerUp={endPaint} onPointerCancel={endPaint}>
+    <div ref={boardRef} className={`sudoku-board size-${size} ${notesMode ? 'notes-mode' : ''} ${lockedDigit ? 'paint-mode' : ''} ${eraserMode ? 'eraser-mode' : ''}`} style={boardStyle} role="grid" aria-label={eraserMode ? 'Поле судоку. Закреплён ластик' : lockedDigit ? `Поле судоку. Закреплён символ ${symbolForDigit(lockedDigit)}` : 'Поле судоку'} onPointerMove={movePaint} onPointerUp={endPaint} onPointerCancel={endPaint}>
       {board.map((row, r) => row.map((value, c) => {
         const isGiven = puzzle[r][c] !== 0;
         const isSelected = selected?.row === r && selected?.col === c;
@@ -151,10 +179,26 @@ export const SudokuBoard = memo(function SudokuBoard({
         const isSameValue = Boolean(selectedValue && value === selectedValue);
         const isWrong = Boolean(value && !isGiven && solution[r][c] !== value);
         const isHintCell = hint?.cell.row === r && hint?.cell.col === c;
+        const key = `${r}:${c}`;
         const currentRegion = regionId(size, r, c);
         const regionRight = c < size - 1 && regionId(size, r, c + 1) !== currentRegion;
         const regionBottom = r < size - 1 && regionId(size, r + 1, c) !== currentRegion;
-        const classNames = ['sudoku-cell', isGiven ? 'given' : 'editable', relatedToSelection(r, c) ? 'related' : '', isSameValue ? 'same-value' : '', isSelected ? 'selected-local' : '', isRemote ? 'selected-remote' : '', isWrong ? 'wrong' : '', isHintCell ? 'hint-target' : '', hintRelated.has(`${r}:${c}`) ? 'hint-related' : '', regionRight ? 'region-right' : '', regionBottom ? 'region-bottom' : '', c === size - 1 ? 'last-col' : '', r === size - 1 ? 'last-row' : ''].filter(Boolean).join(' ');
+        const classNames = [
+          'sudoku-cell',
+          isGiven ? 'given' : 'editable',
+          isSameValue ? 'same-value' : '',
+          isSelected ? 'selected-local' : '',
+          isRemote ? 'selected-remote' : '',
+          isWrong ? 'wrong' : '',
+          isHintCell ? 'hint-target' : '',
+          hintRelated.has(key) ? 'hint-related' : '',
+          hintStep >= 1 && teaching.blocked.has(key) ? 'hint-blocked' : '',
+          hintStep >= 1 && teaching.sources.has(key) ? 'hint-source' : '',
+          regionRight ? 'region-right' : '',
+          regionBottom ? 'region-bottom' : '',
+          c === size - 1 ? 'last-col' : '',
+          r === size - 1 ? 'last-row' : '',
+        ].filter(Boolean).join(' ');
         return (
           <button key={`${r}-${c}`} className={classNames} data-sudoku-cell data-row={r} data-col={c} onClick={(event) => handleKeyboardClick(r, c, event)} onPointerDown={(event) => beginPaint(r, c, event)} role="gridcell" aria-label={`Строка ${r + 1}, столбец ${c + 1}${value ? `, символ ${symbolForDigit(value)}` : ', пусто'}${isGiven ? ', заданный символ' : ''}`}>
             {value ? <span className="cell-value">{symbolForDigit(value)}</span> : (
