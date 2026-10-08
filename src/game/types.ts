@@ -1,9 +1,9 @@
-export type Digit = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
+export type Digit = number;
 export type CellValue = Digit | 0;
 export type Board = CellValue[][];
 export type NotesGrid = Digit[][][];
-export type Difficulty = 'easy' | 'medium' | 'hard' | 'expert';
-export type BoardSize = 4 | 5 | 6 | 9;
+export type Difficulty = 'easy' | 'medium' | 'hard' | 'expert' | 'legendary' | 'epic';
+export type BoardSize = 9 | 12 | 15 | 18;
 export type PlayerColor = 'blue' | 'orange' | 'green' | 'purple' | 'pink' | 'teal';
 
 export type Coordinate = {
