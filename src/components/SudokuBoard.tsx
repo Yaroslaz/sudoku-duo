@@ -1,5 +1,7 @@
-import { memo, useRef, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react';
-import type { Board, Coordinate, Digit, Hint, NotesGrid } from '../game/types';
+import { memo, useMemo, useRef, type CSSProperties, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react';
+import { playerColorHex } from '../game/playerColors';
+import { regionId } from '../game/engine';
+import type { Board, BoardSize, Coordinate, Digit, Hint, NotesGrid, PlayerColor } from '../game/types';
 
 type PaintMode = 'add' | 'erase';
 
@@ -10,6 +12,7 @@ export const SudokuBoard = memo(function SudokuBoard({
   notes,
   selected,
   remoteSelected,
+  remoteColor,
   hint,
   notesMode,
   eraserMode,
@@ -24,6 +27,7 @@ export const SudokuBoard = memo(function SudokuBoard({
   notes: NotesGrid;
   selected: Coordinate | null;
   remoteSelected: Coordinate | null;
+  remoteColor?: PlayerColor | null;
   hint: Hint | null;
   notesMode: boolean;
   eraserMode: boolean;
@@ -32,34 +36,31 @@ export const SudokuBoard = memo(function SudokuBoard({
   onPaintCell: (row: number, col: number, mode: PaintMode) => void;
   onEraseCell: (row: number, col: number) => void;
 }) {
+  const size = board.length as BoardSize;
+  const boardRef = useRef<HTMLDivElement>(null);
   const painting = useRef(false);
   const gesture = useRef<'digit' | 'eraser' | null>(null);
   const paintMode = useRef<PaintMode>('add');
   const paintedCells = useRef(new Set<string>());
+  const activePointer = useRef<number | null>(null);
   const selectedValue = eraserMode ? 0 : lockedDigit ?? (selected ? board[selected.row][selected.col] : 0);
+  const noteColumns = size <= 4 ? 2 : 3;
+  const noteRows = Math.ceil(size / noteColumns);
+  const hintRelated = useMemo(() => new Set(hint?.related.map((cell) => `${cell.row}:${cell.col}`) ?? []), [hint]);
 
   const relatedToSelection = (row: number, col: number) => {
     if (!selected) return false;
-    const sameRow = row === selected.row;
-    const sameCol = col === selected.col;
-    const sameBox = Math.floor(row / 3) === Math.floor(selected.row / 3) && Math.floor(col / 3) === Math.floor(selected.col / 3);
-    return sameRow || sameCol || sameBox;
+    return row === selected.row || col === selected.col || regionId(size, row, col) === regionId(size, selected.row, selected.col);
   };
-
-  const hintRelated = new Set(hint?.related.map((cell) => `${cell.row}:${cell.col}`) ?? []);
 
   const shouldAffectDigitCell = (row: number, col: number) => {
     if (!lockedDigit || puzzle[row][col] !== 0) return false;
-
     if (notesMode) {
       if (board[row][col] !== 0) return false;
       const hasNote = notes[row][col].includes(lockedDigit);
       return paintMode.current === 'erase' ? hasNote : !hasNote;
     }
-
-    return paintMode.current === 'erase'
-      ? board[row][col] === lockedDigit
-      : board[row][col] === 0;
+    return paintMode.current === 'erase' ? board[row][col] === lockedDigit : board[row][col] === 0;
   };
 
   const paintDigitCell = (row: number, col: number) => {
@@ -82,11 +83,11 @@ export const SudokuBoard = memo(function SudokuBoard({
 
   const beginPaint = (row: number, col: number, event: ReactPointerEvent<HTMLButtonElement>) => {
     if (puzzle[row][col] !== 0 || (!eraserMode && !lockedDigit)) return;
-
     event.preventDefault();
     painting.current = true;
+    activePointer.current = event.pointerId;
     paintedCells.current.clear();
-    event.currentTarget.parentElement?.setPointerCapture?.(event.pointerId);
+    boardRef.current?.setPointerCapture?.(event.pointerId);
 
     if (eraserMode) {
       gesture.current = 'eraser';
@@ -102,19 +103,23 @@ export const SudokuBoard = memo(function SudokuBoard({
   };
 
   const movePaint = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (!painting.current) return;
+    if (!painting.current || (activePointer.current !== null && event.pointerId !== activePointer.current)) return;
     event.preventDefault();
     const target = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>('[data-sudoku-cell]');
     if (!target) return;
     const row = Number(target.dataset.row);
     const col = Number(target.dataset.col);
-    if (!Number.isInteger(row) || !Number.isInteger(col)) return;
-
+    if (!Number.isInteger(row) || !Number.isInteger(col) || row < 0 || col < 0 || row >= size || col >= size) return;
     if (gesture.current === 'eraser') eraseCell(row, col);
     else if (gesture.current === 'digit') paintDigitCell(row, col);
   };
 
-  const endPaint = () => {
+  const endPaint = (event?: ReactPointerEvent<HTMLDivElement>) => {
+    if (event && activePointer.current !== null && event.pointerId !== activePointer.current) return;
+    if (activePointer.current !== null && boardRef.current?.hasPointerCapture?.(activePointer.current)) {
+      boardRef.current.releasePointerCapture?.(activePointer.current);
+    }
+    activePointer.current = null;
     painting.current = false;
     gesture.current = null;
     paintedCells.current.clear();
@@ -125,26 +130,26 @@ export const SudokuBoard = memo(function SudokuBoard({
       if (!eraserMode && !lockedDigit) onSelect(row, col);
       return;
     }
-
-    if (eraserMode) {
-      onEraseCell(row, col);
-      return;
-    }
-
+    if (eraserMode) return onEraseCell(row, col);
     if (lockedDigit) {
       const mode: PaintMode = notesMode
         ? notes[row][col].includes(lockedDigit) ? 'erase' : 'add'
         : board[row][col] === lockedDigit ? 'erase' : 'add';
-      onPaintCell(row, col, mode);
-      return;
+      return onPaintCell(row, col, mode);
     }
-
     onSelect(row, col);
   };
 
+  const boardStyle = {
+    '--board-size': size,
+    '--remote-color': remoteColor ? playerColorHex[remoteColor] : '#e38445',
+  } as CSSProperties;
+
   return (
     <div
-      className={`sudoku-board ${notesMode ? 'notes-mode' : ''} ${lockedDigit ? 'paint-mode' : ''} ${eraserMode ? 'eraser-mode' : ''}`}
+      ref={boardRef}
+      className={`sudoku-board size-${size} ${notesMode ? 'notes-mode' : ''} ${lockedDigit ? 'paint-mode' : ''} ${eraserMode ? 'eraser-mode' : ''}`}
+      style={boardStyle}
       role="grid"
       aria-label={eraserMode ? 'Поле судоку. Включён ластик' : lockedDigit ? `Поле судоку. Закреплена цифра ${lockedDigit}` : 'Поле судоку'}
       onPointerMove={movePaint}
@@ -158,6 +163,9 @@ export const SudokuBoard = memo(function SudokuBoard({
         const isSameValue = Boolean(selectedValue && value === selectedValue);
         const isWrong = Boolean(value && !isGiven && solution[r][c] !== value);
         const isHintCell = hint?.cell.row === r && hint?.cell.col === c;
+        const currentRegion = regionId(size, r, c);
+        const regionRight = c < size - 1 && regionId(size, r, c + 1) !== currentRegion;
+        const regionBottom = r < size - 1 && regionId(size, r + 1, c) !== currentRegion;
         const classNames = [
           'sudoku-cell',
           isGiven ? 'given' : 'editable',
@@ -168,8 +176,10 @@ export const SudokuBoard = memo(function SudokuBoard({
           isWrong ? 'wrong' : '',
           isHintCell ? 'hint-target' : '',
           hintRelated.has(`${r}:${c}`) ? 'hint-related' : '',
-          c % 3 === 2 && c !== 8 ? 'box-right' : '',
-          r % 3 === 2 && r !== 8 ? 'box-bottom' : '',
+          regionRight ? 'region-right' : '',
+          regionBottom ? 'region-bottom' : '',
+          c === size - 1 ? 'last-col' : '',
+          r === size - 1 ? 'last-row' : '',
         ].filter(Boolean).join(' ');
 
         return (
@@ -185,10 +195,14 @@ export const SudokuBoard = memo(function SudokuBoard({
             aria-label={`Строка ${r + 1}, столбец ${c + 1}${value ? `, число ${value}` : ', пусто'}${isGiven ? ', заданная цифра' : ''}`}
           >
             {value ? <span className="cell-value">{value}</span> : (
-              <span className="notes-grid" aria-label={notes[r][c].length ? `Заметки ${notes[r][c].join(', ')}` : undefined}>
-                {Array.from({ length: 9 }, (_, index) => {
-                  const digit = index + 1;
-                  return <span key={digit}>{notes[r][c].includes(digit as Digit) ? digit : ''}</span>;
+              <span
+                className="notes-grid"
+                style={{ gridTemplateColumns: `repeat(${noteColumns}, 1fr)`, gridTemplateRows: `repeat(${noteRows}, 1fr)` }}
+                aria-label={notes[r][c].length ? `Заметки ${notes[r][c].join(', ')}` : undefined}
+              >
+                {Array.from({ length: size }, (_, index) => {
+                  const digit = (index + 1) as Digit;
+                  return <span key={digit}>{notes[r][c].includes(digit) ? digit : ''}</span>;
                 })}
               </span>
             )}
