@@ -1,11 +1,26 @@
+.adaptive-menu-label {
+  min-width: 0;
+  flex: 1 1 auto;
+  text-align: left;
+}
+
+.adaptive-menu-chevron-slot {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  display: grid;
+  place-items: center;
+  align-self: center;
+  line-height: 0;
+}
+
 .adaptive-menu-chevron {
-  flex: 0 0 auto !important;
+  display: block !important;
   width: 20px;
   height: 20px;
   margin: 0 !important;
   position: static !important;
   inset: auto !important;
-  align-self: center;
   translate: none !important;
   transition: transform 180ms ease;
   transform-origin: 50% 50%;
@@ -13,11 +28,6 @@
 
 .adaptive-menu-chevron.opened {
   transform: rotate(180deg);
-}
-
-.difficulty-menu-target > span:first-child {
-  min-width: 0;
-  flex: 1 1 auto;
 }
 
 .adaptive-menu-dropdown {
