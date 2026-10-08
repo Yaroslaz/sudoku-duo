@@ -24,7 +24,7 @@ import {
   IconX,
 } from '@tabler/icons-react';
 import { useMemo, useState } from 'react';
-import { difficultyLabels, findHint, formatDuration, regionName } from '../game/engine';
+import { difficultyLabels, findHint, formatDuration, regionName, symbolForDigit } from '../game/engine';
 import { elapsedMs, type GameAction } from '../game/session';
 import type { Coordinate, Digit, GameSnapshot, Hint, Player } from '../game/types';
 import { useNow } from '../hooks/useNow';
@@ -75,7 +75,12 @@ export function GameScreen({
     const size = snapshot?.size ?? 9;
     for (let digit = 1; digit <= size; digit += 1) result[digit] = size;
     if (!snapshot) return result;
-    for (const row of snapshot.board) for (const value of row) if (value) result[value] -= 1;
+    for (let row = 0; row < size; row += 1) {
+      for (let col = 0; col < size; col += 1) {
+        const value = snapshot.board[row][col];
+        if (value && value === snapshot.solution[row][col]) result[value] -= 1;
+      }
+    }
     return result;
   }, [snapshot]);
 
@@ -253,6 +258,7 @@ export function GameScreen({
           solution={snapshot.solution}
           notes={snapshot.notes}
           selected={selected}
+          localColor={localPlayer.color}
           remoteSelected={remoteCursor?.cell ?? null}
           remoteColor={remotePlayer?.color ?? null}
           hint={hintOpen ? hint : null}
@@ -302,7 +308,7 @@ export function GameScreen({
                 {hintStep < 2 ? (
                   <ActionIcon variant="light" color="indigo" radius="xl" onClick={() => setHintStep((value) => Math.min(2, value + 1))} aria-label="Следующий шаг" className="pressable-control"><IconChevronRight size={20} /></ActionIcon>
                 ) : (
-                  <ActionIcon variant="filled" color="indigo" radius="xl" onClick={applyHint} aria-label={`Поставить ${hint.digit}`} className="pressable-control"><IconCheck size={20} /></ActionIcon>
+                  <ActionIcon variant="filled" color="indigo" radius="xl" onClick={applyHint} aria-label={`Поставить ${symbolForDigit(hint.digit)}`} className="pressable-control"><IconCheck size={20} /></ActionIcon>
                 )}
               </Group>
             </div>
@@ -350,28 +356,30 @@ export function GameScreen({
 }
 
 function HintStepContent({ hint, step, size }: { hint: Hint; step: number; size: GameSnapshot['size'] }) {
-  if (step === 0) return <Stack gap={4}><Text fw={700}>Поставь {hint.digit}</Text><Text size="sm" c="dimmed">{hintSummary(hint)}</Text></Stack>;
+  const symbol = symbolForDigit(hint.digit);
+  if (step === 0) return <Stack gap={4}><Text fw={700}>Поставь {symbol}</Text><Text size="sm" c="dimmed">{hintSummary(hint)}</Text></Stack>;
   if (step === 1) return <Stack gap={4}><Text fw={700}>Похожий пример</Text><Text size="sm" c="dimmed">{hintExample(hint)}</Text></Stack>;
   return <Stack gap={4}><Text fw={700}>Почему это работает</Text><Text size="sm" c="dimmed">{hintRule(hint, size)}</Text></Stack>;
 }
 
 function hintSummary(hint: Hint) {
-  if (hint.kind === 'naked-single') return `После исключения занятых вариантов у клетки остаётся только ${hint.digit}.`;
-  if (hint.kind === 'hidden-single-row') return `В этой строке только одна клетка допускает ${hint.digit}.`;
-  if (hint.kind === 'hidden-single-column') return `В этом столбце только одна клетка допускает ${hint.digit}.`;
-  return `В этой области только одна клетка допускает ${hint.digit}.`;
+  const symbol = symbolForDigit(hint.digit);
+  if (hint.kind === 'naked-single') return `После исключения занятых вариантов у клетки остаётся только ${symbol}.`;
+  if (hint.kind === 'hidden-single-row') return `В этой строке только одна клетка допускает ${symbol}.`;
+  if (hint.kind === 'hidden-single-column') return `В этом столбце только одна клетка допускает ${symbol}.`;
+  return `В этом блоке только одна клетка допускает ${symbol}.`;
 }
 
 function hintExample(hint: Hint) {
-  if (hint.kind === 'naked-single') return 'Например, если у пустой клетки возможны 2, 4 и 6, но 2 уже есть в строке, а 4 — в области, остаётся только 6.';
-  if (hint.kind === 'hidden-single-row') return 'Например, в строке несколько пустых клеток, но только одна из них не пересекается со столбцом или областью, где эта цифра уже занята.';
-  if (hint.kind === 'hidden-single-column') return 'То же работает по вертикали: если цифра может появиться только в одной клетке столбца, её можно поставить туда сразу.';
-  return 'Просмотри все клетки одной области: строки и столбцы исключают позиции, пока для нужной цифры не останется единственное место.';
+  if (hint.kind === 'naked-single') return 'Например, у клетки остаются несколько кандидатов, но строка, столбец и блок постепенно исключают все варианты кроме одного.';
+  if (hint.kind === 'hidden-single-row') return 'В строке может быть несколько пустых клеток, но нужный символ допускается только в одной из них.';
+  if (hint.kind === 'hidden-single-column') return 'То же работает по вертикали: если символ может появиться только в одной клетке столбца, его можно поставить туда сразу.';
+  return 'Просмотри все клетки одного блока: строки и столбцы исключают позиции, пока для нужного символа не останется единственное место.';
 }
 
 function hintRule(hint: Hint, size: GameSnapshot['size']) {
-  if (hint.kind === 'naked-single') return `Правило «единственный кандидат»: цифра ставится, когда после правил строки, столбца и ${regionName(size)} у клетки остаётся ровно один кандидат.`;
-  if (hint.kind === 'hidden-single-row') return 'Правило «скрытая одиночка»: если конкретная цифра может стоять только в одной клетке строки, она обязана быть там, даже если у клетки есть другие кандидаты.';
-  if (hint.kind === 'hidden-single-column') return 'Правило «скрытая одиночка» работает так же для столбца: единственная допустимая позиция фиксирует цифру.';
-  return 'Правило «скрытая одиночка» работает и внутри области: если для цифры осталась одна допустимая клетка, она является ответом.';
+  if (hint.kind === 'naked-single') return `Правило «единственный кандидат»: символ ставится, когда после правил строки, столбца и ${regionName(size)} у клетки остаётся ровно один кандидат.`;
+  if (hint.kind === 'hidden-single-row') return 'Правило «скрытая одиночка»: если конкретный символ может стоять только в одной клетке строки, он обязан быть там, даже если у клетки есть другие кандидаты.';
+  if (hint.kind === 'hidden-single-column') return 'Правило «скрытая одиночка» работает так же для столбца: единственная допустимая позиция фиксирует символ.';
+  return 'Правило «скрытая одиночка» работает и внутри блока: если для символа осталась одна допустимая клетка, она является ответом.';
 }
