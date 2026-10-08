@@ -13,15 +13,18 @@ import {
   IconArrowLeft,
   IconBulb,
   IconCheck,
+  IconChevronLeft,
+  IconChevronRight,
   IconHelpCircle,
   IconPlayerPause,
   IconPlayerPlay,
+  IconRefresh,
   IconWifi,
   IconWifiOff,
   IconX,
 } from '@tabler/icons-react';
 import { useMemo, useState } from 'react';
-import { difficultyLabels, findHint, formatDuration } from '../game/engine';
+import { difficultyLabels, findHint, formatDuration, regionName } from '../game/engine';
 import { elapsedMs, type GameAction } from '../game/session';
 import type { Coordinate, Digit, GameSnapshot, Hint, Player } from '../game/types';
 import { useNow } from '../hooks/useNow';
@@ -31,7 +34,6 @@ import { RulesModal } from './RulesModal';
 import { SudokuBoard } from './SudokuBoard';
 
 type PaintMode = 'add' | 'erase';
-
 const scoreFormatter = new Intl.NumberFormat('ru-RU');
 
 export function GameScreen({
@@ -44,6 +46,7 @@ export function GameScreen({
   onAction,
   onCursor,
   onLeave,
+  onReconnect,
 }: {
   snapshot: GameSnapshot | null;
   players: Player[];
@@ -54,6 +57,7 @@ export function GameScreen({
   onAction: (action: GameAction) => void;
   onCursor: (cell: Coordinate | null, notesMode: boolean) => void;
   onLeave: () => void;
+  onReconnect?: () => void;
 }) {
   const [selected, setSelected] = useState<Coordinate | null>(null);
   const [notesMode, setNotesMode] = useState(false);
@@ -61,13 +65,15 @@ export function GameScreen({
   const [lockedDigit, setLockedDigit] = useState<Digit | null>(null);
   const [hint, setHint] = useState<Hint | null>(null);
   const [hintOpen, setHintOpen] = useState(false);
+  const [hintStep, setHintStep] = useState(0);
   const [rulesOpen, setRulesOpen] = useState(false);
   const [leaveOpen, setLeaveOpen] = useState(false);
   const now = useNow(Boolean(snapshot && !snapshot.completedAt && !snapshot.pausedAt));
 
   const remaining = useMemo(() => {
     const result: Record<number, number> = {};
-    for (let digit = 1; digit <= 9; digit += 1) result[digit] = 9;
+    const size = snapshot?.size ?? 9;
+    for (let digit = 1; digit <= size; digit += 1) result[digit] = size;
     if (!snapshot) return result;
     for (const row of snapshot.board) for (const value of row) if (value) result[value] -= 1;
     return result;
@@ -84,6 +90,7 @@ export function GameScreen({
   }
 
   const paused = snapshot.pausedAt !== null;
+  const connectionLost = peerState === 'disconnected' || peerState === 'failed';
   const localScore = snapshot.scores[localPlayer.id];
   const remotePlayer = players.find((player) => player.id !== localPlayer.id) ?? null;
   const remoteScore = remotePlayer ? snapshot.scores[remotePlayer.id] : null;
@@ -120,18 +127,15 @@ export function GameScreen({
   const digit = (value: Digit) => {
     if (!selected || paused || snapshot.completedAt || snapshot.puzzle[selected.row][selected.col] !== 0) return;
     setEraserMode(false);
-
     if (notesMode) {
       if (snapshot.board[selected.row][selected.col] !== 0) return;
       onAction({ type: 'note', playerId: localPlayer.id, row: selected.row, col: selected.col, digit: value });
       return;
     }
-
     if (snapshot.board[selected.row][selected.col] === value) {
       onAction({ type: 'clear', playerId: localPlayer.id, row: selected.row, col: selected.col });
       return;
     }
-
     onAction({ type: 'set', playerId: localPlayer.id, row: selected.row, col: selected.col, digit: value });
   };
 
@@ -139,7 +143,6 @@ export function GameScreen({
     if (!lockedDigit || paused || snapshot.completedAt || snapshot.puzzle[row][col] !== 0) return;
     setSelected({ row, col });
     onCursor({ row, col }, notesMode);
-
     if (notesMode) {
       if (snapshot.board[row][col] !== 0) return;
       const hasNote = snapshot.notes[row][col].includes(lockedDigit);
@@ -147,13 +150,11 @@ export function GameScreen({
       onAction({ type: 'note', playerId: localPlayer.id, row, col, digit: lockedDigit });
       return;
     }
-
     if (mode === 'erase') {
       if (snapshot.board[row][col] !== lockedDigit) return;
       onAction({ type: 'clear', playerId: localPlayer.id, row, col });
       return;
     }
-
     if (snapshot.board[row][col] !== 0) return;
     onAction({ type: 'set', playerId: localPlayer.id, row, col, digit: lockedDigit });
   };
@@ -170,6 +171,7 @@ export function GameScreen({
     setEraserMode(false);
     const found = findHint(snapshot.board);
     setHint(found);
+    setHintStep(0);
     if (found) {
       setSelected(found.cell);
       onCursor(found.cell, false);
@@ -181,6 +183,7 @@ export function GameScreen({
   const closeHint = () => {
     setHintOpen(false);
     setHint(null);
+    setHintStep(0);
   };
 
   const applyHint = () => {
@@ -207,125 +210,41 @@ export function GameScreen({
   return (
     <main className={`game-shell reference-game ${notesMode ? 'notes-mode-active' : ''} ${eraserMode ? 'eraser-mode-active' : ''} ${lockedDigit ? 'locked-mode-active' : ''} ${hintOpen ? 'hint-mode-active' : ''}`}>
       <header className="reference-header">
-        <ActionIcon
-          variant="subtle"
-          color="indigo"
-          size={48}
-          radius="xl"
-          aria-label="Выйти из игры"
-          onClick={() => setLeaveOpen(true)}
-          className="reference-header-action pressable-control"
-        >
-          <IconArrowLeft size={31} stroke={1.8} />
+        <ActionIcon variant="subtle" color="indigo" size={46} radius="xl" aria-label="Выйти из игры" onClick={() => setLeaveOpen(true)} className="reference-header-action pressable-control">
+          <IconArrowLeft size={30} stroke={1.8} />
         </ActionIcon>
         <Text className="reference-progress" fw={700}>{localScore?.correct ?? 0}</Text>
-        <Group gap={4} wrap="nowrap">
-          <ActionIcon
-            variant={rulesOpen ? 'light' : 'subtle'}
-            color="indigo"
-            size={48}
-            radius="xl"
-            aria-label="Открыть правила"
-            aria-pressed={rulesOpen}
-            onClick={() => setRulesOpen(true)}
-            className="reference-header-action pressable-control"
-          >
-            <IconHelpCircle size={29} stroke={1.8} />
+        <Group gap={1} wrap="nowrap" className="reference-header-actions">
+          <ActionIcon variant={rulesOpen ? 'light' : 'subtle'} color="indigo" size={42} radius="xl" aria-label="Открыть правила" aria-pressed={rulesOpen} onClick={() => setRulesOpen(true)} className="reference-header-action pressable-control">
+            <IconHelpCircle size={26} stroke={1.8} />
           </ActionIcon>
           {peerState && (
-            <span
-              className={`reference-connection ${peerState === 'connected' ? 'connected' : 'disconnected'}`}
-              aria-label={peerState === 'connected' ? 'Соединение активно' : 'Соединение потеряно'}
-              title={latency === null ? undefined : `${latency} мс`}
-            >
-              {peerState === 'connected' ? <IconWifi size={27} stroke={1.8} /> : <IconWifiOff size={27} stroke={1.8} />}
+            <span className={`reference-connection ${peerState === 'connected' ? 'connected' : 'disconnected'}`} aria-label={peerState === 'connected' ? 'Соединение активно' : 'Соединение потеряно'} title={latency === null ? undefined : `${latency} мс`}>
+              {peerState === 'connected' ? <IconWifi size={24} stroke={1.8} /> : <IconWifiOff size={24} stroke={1.8} />}
             </span>
           )}
-        </Group>
-      </header>
-
-      <section className="reference-stats" aria-label="Статистика игры">
-        <div className="reference-stat">
-          <Text className="reference-stat-label">Счёт</Text>
-          <Text className="reference-stat-value reference-score-value">{scoreText}</Text>
-        </div>
-        <div className="reference-stat">
-          <Text className="reference-stat-label">Уровень</Text>
-          <Text className="reference-stat-value">{difficultyLabels[snapshot.difficulty]}</Text>
-        </div>
-        <div className="reference-stat">
-          <Text className="reference-stat-label">Ошибки</Text>
-          <Text className="reference-stat-value">{scoreFormatter.format(localScore?.mistakes ?? 0)}</Text>
-        </div>
-        <div className="reference-stat reference-time-stat">
-          <div className="reference-time-copy">
-            <Text className="reference-stat-label">Время</Text>
-            <Text className="reference-stat-value timer">{formatDuration(elapsedMs(snapshot, now))}</Text>
-          </div>
           <ActionIcon
-            variant={paused ? 'filled' : 'light'}
-            color={paused ? 'indigo' : 'gray'}
-            size={44}
+            variant={paused ? 'filled' : 'subtle'}
+            color="indigo"
+            size={42}
             radius="xl"
             aria-label={paused ? 'Продолжить игру' : 'Поставить на паузу'}
             aria-pressed={paused}
             onClick={togglePause}
-            disabled={Boolean(snapshot.completedAt)}
-            className="reference-pause pressable-control"
+            disabled={Boolean(snapshot.completedAt) || connectionLost}
+            className="reference-header-action reference-pause pressable-control"
           >
             {paused ? <IconPlayerPlay size={24} stroke={1.8} /> : <IconPlayerPause size={24} stroke={1.8} />}
           </ActionIcon>
-        </div>
+        </Group>
+      </header>
+
+      <section className="reference-stats" aria-label="Статистика игры">
+        <div className="reference-stat"><Text className="reference-stat-label">Счёт</Text><Text className="reference-stat-value reference-score-value">{scoreText}</Text></div>
+        <div className="reference-stat"><Text className="reference-stat-label">Уровень</Text><Text className="reference-stat-value">{difficultyLabels[snapshot.difficulty]} · {snapshot.size}×{snapshot.size}</Text></div>
+        <div className="reference-stat"><Text className="reference-stat-label">Ошибки</Text><Text className="reference-stat-value">{scoreFormatter.format(localScore?.mistakes ?? 0)}</Text></div>
+        <div className="reference-stat"><Text className="reference-stat-label">Время</Text><Text className="reference-stat-value timer">{formatDuration(elapsedMs(snapshot, now))}</Text></div>
       </section>
-
-      {peerState && peerState !== 'connected' && (
-        <div className="reference-connection-warning">Связь со вторым телефоном прервалась</div>
-      )}
-
-      {hintOpen && (
-        <section className="inline-hint" aria-live="polite">
-          <IconBulb className="inline-hint-icon" size={24} stroke={1.9} aria-hidden="true" />
-          <div className="inline-hint-copy">
-            {hint ? (
-              <>
-                <Text fw={700} className="inline-hint-title">
-                  Строка {hint.cell.row + 1} · столбец {hint.cell.col + 1} — поставь {hint.digit}
-                </Text>
-                <Text className="inline-hint-text">{hintSummary(hint)}</Text>
-              </>
-            ) : (
-              <>
-                <Text fw={700} className="inline-hint-title">Сейчас нет очевидного хода</Text>
-                <Text className="inline-hint-text">Попробуй добавить кандидаты заметками и проверь поле ещё раз.</Text>
-              </>
-            )}
-          </div>
-          {hint && (
-            <ActionIcon
-              variant="subtle"
-              color="indigo"
-              radius="xl"
-              size={40}
-              onClick={applyHint}
-              aria-label={`Поставить ${hint.digit}`}
-              className="inline-hint-action pressable-control"
-            >
-              <IconCheck size={22} stroke={2.1} />
-            </ActionIcon>
-          )}
-          <ActionIcon
-            variant="subtle"
-            color="gray"
-            radius="xl"
-            size={40}
-            onClick={closeHint}
-            aria-label="Закрыть подсказку"
-            className="inline-hint-action pressable-control"
-          >
-            <IconX size={21} stroke={2} />
-          </ActionIcon>
-        </section>
-      )}
 
       <section className="board-section">
         <SudokuBoard
@@ -335,6 +254,7 @@ export function GameScreen({
           notes={snapshot.notes}
           selected={selected}
           remoteSelected={remoteCursor?.cell ?? null}
+          remoteColor={remotePlayer?.color ?? null}
           hint={hintOpen ? hint : null}
           notesMode={notesMode}
           eraserMode={eraserMode}
@@ -347,6 +267,7 @@ export function GameScreen({
 
       <section className="controls-section">
         <NumberPad
+          size={snapshot.size}
           remaining={remaining}
           notesMode={notesMode}
           eraserMode={eraserMode}
@@ -361,18 +282,50 @@ export function GameScreen({
         />
       </section>
 
+      {hintOpen && (
+        <section className="floating-hint" aria-live="polite">
+          <div className="floating-hint-head">
+            <IconBulb size={22} stroke={1.9} aria-hidden="true" />
+            <Text fw={700}>{hint ? `Строка ${hint.cell.row + 1} · столбец ${hint.cell.col + 1}` : 'Подсказка'}</Text>
+            <ActionIcon variant="subtle" color="gray" radius="xl" size={34} onClick={closeHint} aria-label="Закрыть подсказку" className="pressable-control"><IconX size={19} /></ActionIcon>
+          </div>
+          <div className="floating-hint-body">
+            {hint ? <HintStepContent hint={hint} step={hintStep} size={snapshot.size} /> : <Text size="sm">Сейчас нет очевидного логического шага. Добавь кандидаты заметками и попробуй снова.</Text>}
+          </div>
+          {hint && (
+            <div className="floating-hint-footer">
+              <Group gap={4} className="hint-dots" aria-label={`Шаг ${hintStep + 1} из 3`}>
+                {[0, 1, 2].map((step) => <span key={step} className={step === hintStep ? 'active' : ''} />)}
+              </Group>
+              <Group gap={4}>
+                {hintStep > 0 && <ActionIcon variant="subtle" color="gray" radius="xl" onClick={() => setHintStep((value) => Math.max(0, value - 1))} aria-label="Предыдущий шаг" className="pressable-control"><IconChevronLeft size={20} /></ActionIcon>}
+                {hintStep < 2 ? (
+                  <ActionIcon variant="light" color="indigo" radius="xl" onClick={() => setHintStep((value) => Math.min(2, value + 1))} aria-label="Следующий шаг" className="pressable-control"><IconChevronRight size={20} /></ActionIcon>
+                ) : (
+                  <ActionIcon variant="filled" color="indigo" radius="xl" onClick={applyHint} aria-label={`Поставить ${hint.digit}`} className="pressable-control"><IconCheck size={20} /></ActionIcon>
+                )}
+              </Group>
+            </div>
+          )}
+        </section>
+      )}
+
       {paused && (
         <div className="pause-overlay">
           <Paper radius="xl" p="xl" shadow="xl" className="pause-card">
             <Stack align="center" gap="md">
-              <ThemeIcon size={64} radius="xl" variant="light" color="indigo">
-                <IconPlayerPause size={30} stroke={2} />
+              <ThemeIcon size={64} radius="xl" variant="light" color={connectionLost ? 'orange' : 'indigo'}>
+                {connectionLost ? <IconWifiOff size={30} stroke={2} /> : <IconPlayerPause size={30} stroke={2} />}
               </ThemeIcon>
               <Stack align="center" gap={4}>
-                <Title order={2}>Игра на паузе</Title>
-                <Text c="dimmed" ta="center">Поле скрыто у обоих игроков. Таймер тоже остановлен.</Text>
+                <Title order={2}>{connectionLost ? 'Связь прервалась' : 'Игра на паузе'}</Title>
+                <Text c="dimmed" ta="center">{connectionLost ? 'Партия автоматически поставлена на паузу. Переподключись, чтобы синхронизировать поле и продолжить.' : 'Поле скрыто у обоих игроков. Таймер тоже остановлен.'}</Text>
               </Stack>
-              <Button radius="xl" size="md" leftSection={<IconPlayerPlay size={18} />} onClick={togglePause} className="pressable-control">Продолжить</Button>
+              {connectionLost && onReconnect ? (
+                <Button radius="xl" size="md" leftSection={<IconRefresh size={18} />} onClick={onReconnect} className="pressable-control">Переподключиться</Button>
+              ) : (
+                <Button radius="xl" size="md" leftSection={<IconPlayerPlay size={18} />} onClick={togglePause} className="pressable-control">Продолжить</Button>
+              )}
             </Stack>
           </Paper>
         </div>
@@ -381,27 +334,14 @@ export function GameScreen({
       <RulesModal opened={rulesOpen} onClose={() => setRulesOpen(false)} />
 
       <Modal opened={leaveOpen} onClose={() => setLeaveOpen(false)} title="Выйти из игры?" centered radius="xl">
-        <Stack>
-          <Text c="dimmed">Текущее поле сохранится на этом устройстве. Совместное соединение будет закрыто.</Text>
-          <Group grow>
-            <Button variant="light" color="gray" onClick={() => setLeaveOpen(false)} className="pressable-control">Остаться</Button>
-            <Button color="red" onClick={onLeave} className="pressable-control">Выйти из игры</Button>
-          </Group>
-        </Stack>
+        <Stack><Text c="dimmed">Текущее поле сохранится на этом устройстве. Совместное соединение будет закрыто.</Text><Group grow><Button variant="light" color="gray" onClick={() => setLeaveOpen(false)} className="pressable-control">Остаться</Button><Button color="red" onClick={onLeave} className="pressable-control">Выйти из игры</Button></Group></Stack>
       </Modal>
 
       <Modal opened={Boolean(snapshot.completedAt)} onClose={() => {}} withCloseButton={false} centered radius="xl" size="sm">
         <Stack align="center" gap="md" py="md">
-          <ThemeIcon size={72} radius="xl" color="teal" variant="light">
-            <IconCheck size={34} stroke={2.5} />
-          </ThemeIcon>
+          <ThemeIcon size={72} radius="xl" color="teal" variant="light"><IconCheck size={34} stroke={2.5} /></ThemeIcon>
           <Stack gap={2} align="center"><Title order={2}>Готово</Title><Text c="dimmed">Поле решено за {formatDuration(elapsedMs(snapshot, snapshot.completedAt ?? now))}</Text></Stack>
-          <div className="result-grid">
-            {players.map((player) => {
-              const score = snapshot.scores[player.id];
-              return <Paper key={player.id} withBorder radius="lg" p="md"><Text size="sm" c="dimmed">{player.name}</Text><Text fz="xl" fw={800}>{scoreFormatter.format(score?.score ?? 0)}</Text><Text size="xs" c="dimmed">{score?.correct ?? 0} верно · {score?.mistakes ?? 0} ошибок</Text></Paper>;
-            })}
-          </div>
+          <div className="result-grid">{players.map((player) => { const score = snapshot.scores[player.id]; return <Paper key={player.id} withBorder radius="lg" p="md"><Text size="sm" c="dimmed">{player.name}</Text><Text fz="xl" fw={800}>{scoreFormatter.format(score?.score ?? 0)}</Text><Text size="xs" c="dimmed">{score?.correct ?? 0} верно · {score?.mistakes ?? 0} ошибок</Text></Paper>; })}</div>
           <Button radius="xl" size="md" fullWidth onClick={onLeave} className="pressable-control">На главный экран</Button>
         </Stack>
       </Modal>
@@ -409,9 +349,29 @@ export function GameScreen({
   );
 }
 
+function HintStepContent({ hint, step, size }: { hint: Hint; step: number; size: GameSnapshot['size'] }) {
+  if (step === 0) return <Stack gap={4}><Text fw={700}>Поставь {hint.digit}</Text><Text size="sm" c="dimmed">{hintSummary(hint)}</Text></Stack>;
+  if (step === 1) return <Stack gap={4}><Text fw={700}>Похожий пример</Text><Text size="sm" c="dimmed">{hintExample(hint)}</Text></Stack>;
+  return <Stack gap={4}><Text fw={700}>Почему это работает</Text><Text size="sm" c="dimmed">{hintRule(hint, size)}</Text></Stack>;
+}
+
 function hintSummary(hint: Hint) {
-  if (hint.kind === 'naked-single') return `В этой клетке остаётся только цифра ${hint.digit}.`;
-  if (hint.kind === 'hidden-single-row') return `Для цифры ${hint.digit} это единственное допустимое место в строке.`;
-  if (hint.kind === 'hidden-single-column') return `Для цифры ${hint.digit} это единственное допустимое место в столбце.`;
-  return `Для цифры ${hint.digit} это единственное допустимое место в квадрате 3×3.`;
+  if (hint.kind === 'naked-single') return `После исключения занятых вариантов у клетки остаётся только ${hint.digit}.`;
+  if (hint.kind === 'hidden-single-row') return `В этой строке только одна клетка допускает ${hint.digit}.`;
+  if (hint.kind === 'hidden-single-column') return `В этом столбце только одна клетка допускает ${hint.digit}.`;
+  return `В этой области только одна клетка допускает ${hint.digit}.`;
+}
+
+function hintExample(hint: Hint) {
+  if (hint.kind === 'naked-single') return 'Например, если у пустой клетки возможны 2, 4 и 6, но 2 уже есть в строке, а 4 — в области, остаётся только 6.';
+  if (hint.kind === 'hidden-single-row') return 'Например, в строке несколько пустых клеток, но только одна из них не пересекается со столбцом или областью, где эта цифра уже занята.';
+  if (hint.kind === 'hidden-single-column') return 'То же работает по вертикали: если цифра может появиться только в одной клетке столбца, её можно поставить туда сразу.';
+  return 'Просмотри все клетки одной области: строки и столбцы исключают позиции, пока для нужной цифры не останется единственное место.';
+}
+
+function hintRule(hint: Hint, size: GameSnapshot['size']) {
+  if (hint.kind === 'naked-single') return `Правило «единственный кандидат»: цифра ставится, когда после правил строки, столбца и ${regionName(size)} у клетки остаётся ровно один кандидат.`;
+  if (hint.kind === 'hidden-single-row') return 'Правило «скрытая одиночка»: если конкретная цифра может стоять только в одной клетке строки, она обязана быть там, даже если у клетки есть другие кандидаты.';
+  if (hint.kind === 'hidden-single-column') return 'Правило «скрытая одиночка» работает так же для столбца: единственная допустимая позиция фиксирует цифру.';
+  return 'Правило «скрытая одиночка» работает и внутри области: если для цифры осталась одна допустимая клетка, она является ответом.';
 }
