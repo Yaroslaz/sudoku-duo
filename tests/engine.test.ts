@@ -84,6 +84,27 @@ describe('Shared game state', () => {
     expect(correctTwice.snapshot.scores.p.score).toBe(correctOnce.snapshot.scores.p.score);
   });
 
+  it('keeps the first near-simultaneous write to one shared cell', () => {
+    const game = createGame('easy', ['host', 'guest'], 9, null, 'cell-race', 1_000);
+    let row = 0;
+    let col = 0;
+    outer: for (let r = 0; r < game.size; r += 1) {
+      for (let c = 0; c < game.size; c += 1) {
+        if (game.puzzle[r][c] === 0) { row = r; col = c; break outer; }
+      }
+    }
+
+    const firstDigit = game.solution[row][col] as Digit;
+    const secondDigit = Array.from({ length: game.size }, (_, index) => index + 1).find((digit) => digit !== firstDigit)!;
+
+    const first = applyGameAction(game, { type: 'set', playerId: 'host', row, col, digit: firstDigit }, 1_100);
+    const conflicting = applyGameAction(first.snapshot, { type: 'set', playerId: 'guest', row, col, digit: secondDigit }, 1_180);
+
+    expect(first.accepted).toBe(true);
+    expect(conflicting.accepted).toBe(false);
+    expect(conflicting.snapshot.board[row][col]).toBe(firstDigit);
+  });
+
   it('ends the game when the shared mistake limit is reached', () => {
     const game = createGame('easy', ['a', 'b'], 9, 3, 'mistake-limit', 1_000);
     let row = 0;
@@ -97,14 +118,14 @@ describe('Shared game state', () => {
     const wrongs = Array.from({ length: game.size }, (_, index) => index + 1).filter((digit) => digit !== correct).slice(0, 3);
 
     const first = applyGameAction(game, { type: 'set', playerId: 'a', row, col, digit: wrongs[0] }, 1_100);
-    const second = applyGameAction(first.snapshot, { type: 'set', playerId: 'b', row, col, digit: wrongs[1] }, 1_200);
-    const third = applyGameAction(second.snapshot, { type: 'set', playerId: 'a', row, col, digit: wrongs[2] }, 1_300);
+    const second = applyGameAction(first.snapshot, { type: 'set', playerId: 'b', row, col, digit: wrongs[1] }, 2_500);
+    const third = applyGameAction(second.snapshot, { type: 'set', playerId: 'a', row, col, digit: wrongs[2] }, 3_900);
 
     expect(third.failed).toBe(true);
-    expect(third.snapshot.failedAt).toBe(1_300);
+    expect(third.snapshot.failedAt).toBe(3_900);
     expect(Object.values(third.snapshot.scores).reduce((sum, score) => sum + score.mistakes, 0)).toBe(3);
 
-    const afterFailure = applyGameAction(third.snapshot, { type: 'set', playerId: 'a', row, col, digit: correct }, 1_400);
+    const afterFailure = applyGameAction(third.snapshot, { type: 'set', playerId: 'a', row, col, digit: correct }, 5_300);
     expect(afterFailure.accepted).toBe(false);
   });
 });
