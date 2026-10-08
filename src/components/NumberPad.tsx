@@ -39,7 +39,6 @@ export function NumberPad({ size, notesMode, eraserMode, hintActive, disabled, r
   const [burst, setBurst] = useState<{ digit: Digit; id: number } | null>(null);
 
   const digits = useMemo(() => digitsForSize(size), [size]);
-  const visibleDigits = digits.filter((digit) => (remaining[digit] ?? 0) > 0);
 
   useEffect(() => {
     const completed = digits.find((digit) => (previousRemaining.current[digit] ?? 0) > 0 && (remaining[digit] ?? 0) <= 0);
@@ -157,7 +156,8 @@ export function NumberPad({ size, notesMode, eraserMode, hintActive, disabled, r
       </Group>
 
       <div className={`number-strip ${size === 9 ? 'all-fit' : 'scrolling'}`} role="group" aria-label="Символы для ввода">
-        {visibleDigits.map((digit) => {
+        {digits.map((digit) => {
+          const completed = (remaining[digit] ?? 0) <= 0;
           const locked = lockedDigit === digit;
           const active = activeDigit === digit;
           const symbol = symbolForDigit(digit);
@@ -165,17 +165,19 @@ export function NumberPad({ size, notesMode, eraserMode, hintActive, disabled, r
             <button
               key={digit}
               type="button"
-              className={`number-button pressable-control ${locked ? 'locked' : ''} ${active ? 'active' : ''} ${notesMode ? 'note-number' : ''}`}
-              disabled={disabled}
+              className={`number-button pressable-control ${completed ? 'completed' : ''} ${locked ? 'locked' : ''} ${active ? 'active' : ''} ${notesMode ? 'note-number' : ''}`}
+              disabled={disabled || completed}
+              aria-hidden={completed || undefined}
+              tabIndex={completed ? -1 : undefined}
               aria-pressed={locked}
               aria-label={locked ? `${symbol} закреплён. Нажимай клетки поля для ввода` : `Ввести ${symbol}. Удерживай, чтобы закрепить`}
-              onPointerDown={(event) => startHold(digit, event.clientX, event.clientY)}
-              onPointerMove={(event) => cancelIfMoved(event.clientX, event.clientY)}
+              onPointerDown={(event) => !completed && startHold(digit, event.clientX, event.clientY)}
+              onPointerMove={(event) => !completed && cancelIfMoved(event.clientX, event.clientY)}
               onPointerUp={clearHold}
               onPointerCancel={clearHold}
               onPointerLeave={clearHold}
               onContextMenu={(event) => event.preventDefault()}
-              onClick={() => handleDigitClick(digit)}
+              onClick={() => !completed && handleDigitClick(digit)}
             >
               <span className="number-glyph">{symbol}</span>
             </button>
