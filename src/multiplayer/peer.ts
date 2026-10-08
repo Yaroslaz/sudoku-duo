@@ -12,6 +12,13 @@ export type PeerCallbacks = {
   onLatency?: (ms: number | null) => void;
 };
 
+export interface GamePeerSession {
+  getState(): PeerState;
+  setCallbacks(callbacks: PeerCallbacks): void;
+  send(message: WireMessage): boolean;
+  close(): void;
+}
+
 function rtcConfig(): RTCConfiguration {
   return { iceServers: [] };
 }
@@ -39,7 +46,7 @@ function ensureLocalCandidate(description: RTCSessionDescription | null) {
   }
 }
 
-export class PeerSession {
+export class PeerSession implements GamePeerSession {
   private peer: RTCPeerConnection | null = null;
   private channel: RTCDataChannel | null = null;
   private pingTimer: number | null = null;
