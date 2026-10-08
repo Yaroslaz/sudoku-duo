@@ -17,6 +17,7 @@ export type SignalPayload = {
 
 const LEGACY_PREFIX = 'sudoku2';
 const BASE45 = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:';
+const QR_CHUNK_SIZE = 820;
 
 type PackedSignal = {
   p: 2;
@@ -26,6 +27,12 @@ type PackedSignal = {
   i: string;
   n: string;
   c?: PlayerColor;
+};
+
+type PendingChunks = {
+  codec: string;
+  total: number;
+  chunks: Array<string | undefined>;
 };
 
 function bytesToBase64Url(bytes: Uint8Array): string {
@@ -145,14 +152,34 @@ function unpack(value: PackedSignal): SignalPayload {
   };
 }
 
+function shortFrameId(value: string) {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36).toUpperCase().padStart(6, '0').slice(-6);
+}
+
 export async function signalToFrames(payload: SignalPayload): Promise<string[]> {
   const packed = await compress(JSON.stringify(pack(payload)));
   const codec = packed.codec === 'g' ? 'G' : 'R';
-  const frame = `S2${codec}${bytesToBase45(packed.data)}`;
-  if (frame.length > 3600) {
-    throw new Error('QR получился слишком большим для надёжного сканирования. Попробуй пересоздать соединение.');
-  }
-  return [frame];
+  const encoded = bytesToBase45(packed.data);
+  const single = `S2${codec}${encoded}`;
+
+  // Short signals remain a single QR. Dense signals are split so each QR has
+  // fewer modules and therefore much larger squares on the same phone screen.
+  if (single.length <= QR_CHUNK_SIZE + 16) return [single];
+
+  const total = Math.ceil(encoded.length / QR_CHUNK_SIZE);
+  if (total > 35) throw new Error('Данные соединения слишком большие для QR. Используй резервный код.');
+  const id = shortFrameId(encoded);
+  const totalChar = total.toString(36).toUpperCase();
+  return Array.from({ length: total }, (_, index) => {
+    const chunk = encoded.slice(index * QR_CHUNK_SIZE, (index + 1) * QR_CHUNK_SIZE);
+    const indexChar = index.toString(36).toUpperCase();
+    return `S2C${codec}${id}${indexChar}${totalChar}${chunk}`;
+  });
 }
 
 export type FrameProgress = {
@@ -162,9 +189,37 @@ export type FrameProgress = {
 };
 
 export class FrameAssembler {
+  private pending = new Map<string, PendingChunks>();
+
   async add(raw: string): Promise<{ payload: SignalPayload | null; progress: FrameProgress | null }> {
     const value = raw.trim();
     try {
+      if (value.startsWith('S2C') && value.length > 12) {
+        const codec = value[3].toLowerCase();
+        const id = value.slice(4, 10);
+        const index = Number.parseInt(value[10], 36);
+        const total = Number.parseInt(value[11], 36);
+        const chunk = value.slice(12);
+        if (!Number.isInteger(index) || !Number.isInteger(total) || total < 2 || total > 35 || index < 0 || index >= total || !chunk) {
+          throw new Error('Некорректная часть QR соединения');
+        }
+        let entry = this.pending.get(id);
+        if (!entry || entry.total !== total || entry.codec !== codec) {
+          entry = { codec, total, chunks: Array.from({ length: total }) };
+          this.pending.set(id, entry);
+        }
+        entry.chunks[index] = chunk;
+        const received = entry.chunks.filter(Boolean).length;
+        if (received < total) {
+          return { payload: null, progress: { sessionId: id, received, total } };
+        }
+        const encoded = entry.chunks.join('');
+        this.pending.delete(id);
+        const json = await decompress(codec, base45ToBytes(encoded));
+        const payload = unpack(JSON.parse(json) as PackedSignal);
+        return { payload, progress: { sessionId: id, received: total, total } };
+      }
+
       if ((value.startsWith('S2G') || value.startsWith('S2R')) && value.length > 3) {
         const codec = value[2].toLowerCase();
         const json = await decompress(codec, base45ToBytes(value.slice(3)));
@@ -183,15 +238,21 @@ export class FrameAssembler {
     }
   }
 
-  reset() {}
+  reset() {
+    this.pending.clear();
+  }
 }
 
 export function signalToCopyCode(frames: string[]): string {
-  return frames[0] ?? '';
+  return frames.join('\n');
 }
 
 export async function copyCodeToSignal(code: string): Promise<SignalPayload> {
-  const result = await new FrameAssembler().add(code.trim());
-  if (!result.payload) throw new Error('Не удалось прочитать код соединения');
-  return result.payload;
+  const assembler = new FrameAssembler();
+  const parts = code.split(/\s+/).map((part) => part.trim()).filter(Boolean);
+  for (const part of parts) {
+    const result = await assembler.add(part);
+    if (result.payload) return result.payload;
+  }
+  throw new Error('Не удалось прочитать код соединения');
 }
