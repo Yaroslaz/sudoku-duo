@@ -6,8 +6,8 @@ export function QrDisplay({ frames, label }: { frames: string[]; label: string }
   const total = Math.max(frames.length, 1);
   return (
     <Stack gap="sm" align="center">
-      <Paper className="qr-shell" radius="xl" p="sm" withBorder>
-        {dataUrl ? <Image src={dataUrl} alt={label} w="min(72vw, 310px)" h="min(72vw, 310px)" /> : <Box w={280} h={280} />}
+      <Paper className="qr-shell" radius="xl" p={8} withBorder>
+        {dataUrl ? <Image src={dataUrl} alt={label} w="min(64vw, 260px)" h="min(64vw, 260px)" /> : <Box w={240} h={240} />}
       </Paper>
       <Group gap="xs" justify="center">
         <Text size="sm" c="dimmed">{label}</Text>
