@@ -4,7 +4,7 @@ export type Board = CellValue[][];
 export type NotesGrid = Digit[][][];
 export type Difficulty = 'easy' | 'medium' | 'hard' | 'expert' | 'legendary' | 'epic';
 export type BoardSize = 9 | 12 | 15 | 18;
-export type PlayerColor = 'blue' | 'orange' | 'green' | 'purple' | 'pink' | 'teal';
+export type PlayerColor = 'blue' | 'orange' | 'green' | 'purple' | 'teal';
 export type MistakeLimit = 3 | 5 | 10 | null;
 
 export type Coordinate = {
