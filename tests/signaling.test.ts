@@ -25,7 +25,7 @@ describe('local QR signaling', () => {
     expect(result.payload?.networkMode).toBe('local');
   });
 
-  it('keeps a realistic local SDP in one QR and strips optional candidate noise', async () => {
+  it('packs a realistic local connection into a much simpler single QR', async () => {
     const candidate = 'a=candidate:123456 1 udp 2122260223 192.168.1.12 54876 typ host generation 0 ufrag abc123 network-cost 999';
     const payload: SignalPayload = {
       protocol: 2,
@@ -59,14 +59,19 @@ describe('local QR signaling', () => {
 
     const frames = await signalToFrames(payload);
     expect(frames).toHaveLength(1);
-    expect(frames[0].length).toBeLessThan(2850);
+    expect(frames[0].length).toBeLessThan(1000);
 
     const result = await new FrameAssembler().add(frames[0]);
     const restoredSdp = result.payload?.sdp.sdp ?? '';
+    expect(result.payload?.kind).toBe('answer');
+    expect(restoredSdp).toContain('a=ice-ufrag:abc123');
+    expect(restoredSdp).toContain('a=ice-pwd:abcdefghijklmnopqrstuvwx');
+    expect(restoredSdp).toContain('a=fingerprint:sha-256 11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00');
+    expect(restoredSdp).toContain('a=setup:active');
     expect(restoredSdp).toContain('a=candidate:123456 1 udp 2122260223 192.168.1.12 54876 typ host');
     expect(restoredSdp).not.toContain('generation 0');
     expect(restoredSdp).not.toContain('network-cost');
-    expect(restoredSdp).not.toContain('a=ice-options:trickle');
+    expect(restoredSdp).toContain('a=sctp-port:5000');
     expect(restoredSdp).toContain('a=max-message-size:262144');
   });
 });
