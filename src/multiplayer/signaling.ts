@@ -1,3 +1,5 @@
+import type { PlayerColor } from '../game/types';
+
 export type SignalKind = 'offer' | 'answer';
 export type NetworkMode = 'local' | 'internet-assisted';
 
@@ -8,6 +10,7 @@ export type SignalPayload = {
   sender: {
     id: string;
     name: string;
+    color?: PlayerColor;
   };
   networkMode: NetworkMode;
 };
@@ -18,9 +21,7 @@ const CHUNK_SIZE = 850;
 function bytesToBase64Url(bytes: Uint8Array): string {
   let binary = '';
   const step = 0x8000;
-  for (let i = 0; i < bytes.length; i += step) {
-    binary += String.fromCharCode(...bytes.subarray(i, Math.min(i + step, bytes.length)));
-  }
+  for (let i = 0; i < bytes.length; i += step) binary += String.fromCharCode(...bytes.subarray(i, Math.min(i + step, bytes.length)));
   return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
 }
 
@@ -35,10 +36,12 @@ function base64UrlToBytes(value: string): Uint8Array {
 async function compress(text: string): Promise<{ codec: 'g' | 'r'; data: Uint8Array }> {
   if ('CompressionStream' in globalThis) {
     try {
-      const stream = new Blob([new TextEncoder().encode(text)]).stream().pipeThrough(new CompressionStream('gzip'));
+      const buffer = new ArrayBuffer(new TextEncoder().encode(text).byteLength);
+      new Uint8Array(buffer).set(new TextEncoder().encode(text));
+      const stream = new Blob([buffer]).stream().pipeThrough(new CompressionStream('gzip'));
       return { codec: 'g', data: new Uint8Array(await new Response(stream).arrayBuffer()) };
     } catch {
-      // Fall through to the raw representation.
+      // Fall through to raw representation.
     }
   }
   return { codec: 'r', data: new TextEncoder().encode(text) };
@@ -80,9 +83,7 @@ export class FrameAssembler {
     const [, codec, sessionId, indexRaw, totalRaw, chunk] = parts;
     const index = Number(indexRaw);
     const total = Number(totalRaw);
-    if (!sessionId || !Number.isInteger(index) || !Number.isInteger(total) || index < 1 || index > total || total > 50) {
-      return { payload: null, progress: null };
-    }
+    if (!sessionId || !Number.isInteger(index) || !Number.isInteger(total) || index < 1 || index > total || total > 50) return { payload: null, progress: null };
 
     const existing = this.sessions.get(sessionId) ?? { codec, total, chunks: new Map<number, string>() };
     if (existing.codec !== codec || existing.total !== total) {
@@ -100,9 +101,7 @@ export class FrameAssembler {
     try {
       const json = await decompress(codec, base64UrlToBytes(encoded));
       const payload = JSON.parse(json) as SignalPayload;
-      if (payload.protocol !== 1 || (payload.kind !== 'offer' && payload.kind !== 'answer') || !payload.sdp) {
-        throw new Error('Некорректный код соединения');
-      }
+      if (payload.protocol !== 1 || (payload.kind !== 'offer' && payload.kind !== 'answer') || !payload.sdp) throw new Error('Некорректный код соединения');
       return { payload, progress };
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : 'Не удалось прочитать код соединения');
