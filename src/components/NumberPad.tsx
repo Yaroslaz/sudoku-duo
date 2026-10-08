@@ -1,11 +1,13 @@
-import { ActionIcon, Group, SimpleGrid, Stack } from '@mantine/core';
+import { ActionIcon, Group, Stack } from '@mantine/core';
 import { IconBulb, IconEraser, IconPencil } from '@tabler/icons-react';
 import { useRef } from 'react';
-import type { Digit } from '../game/types';
+import { digitsForSize } from '../game/engine';
+import type { BoardSize, Digit } from '../game/types';
 
 const LONG_PRESS_MS = 360;
 
 export function NumberPad({
+  size,
   notesMode,
   eraserMode,
   hintActive,
@@ -18,6 +20,7 @@ export function NumberPad({
   onHint,
   onLockDigit,
 }: {
+  size: BoardSize;
   notesMode: boolean;
   eraserMode: boolean;
   hintActive: boolean;
@@ -105,11 +108,10 @@ export function NumberPad({
         </ActionIcon>
       </Group>
 
-      <SimpleGrid cols={9} spacing={0} className="number-pad">
-        {Array.from({ length: 9 }, (_, index) => (index + 1) as Digit).map((digit) => {
+      <div className="number-strip" role="group" aria-label="Цифры">
+        {digitsForSize(size).map((digit) => {
           const locked = lockedDigit === digit;
           const unavailable = !notesMode && remaining[digit] <= 0;
-
           return (
             <button
               key={digit}
@@ -131,7 +133,7 @@ export function NumberPad({
             </button>
           );
         })}
-      </SimpleGrid>
+      </div>
     </Stack>
   );
 }
