@@ -7,9 +7,11 @@ import './learning-polish.css';
 import './records.css';
 import './input-fixes.css';
 import './icon-polish.css';
+import './ui-polish.css';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
+import { installBackNavigation } from './backNavigation';
 
 const APP_VERSION = __APP_VERSION__;
 const SW_RELOAD_KEY = 'sudoku-duo-sw-reload-version';
@@ -20,6 +22,8 @@ createRoot(document.getElementById('root')!).render(
     <App />
   </StrictMode>,
 );
+
+installBackNavigation();
 
 async function removeSudokuCaches() {
   if (!('caches' in window)) return;
