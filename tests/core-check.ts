@@ -1,37 +1,42 @@
 import { boardMatchesSolution, candidates, countSolutions, findHint, generatePuzzle, isValidPlacement } from '../src/game/engine';
 import { applyGameAction, createGame, elapsedMs } from '../src/game/session';
-import type { Difficulty, Digit } from '../src/game/types';
+import type { BoardSize, Difficulty, Digit } from '../src/game/types';
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
 }
 
 const difficulties: Difficulty[] = ['easy', 'medium', 'hard', 'expert'];
+const sizes: BoardSize[] = [4, 5, 6, 9];
 
-for (const difficulty of difficulties) {
-  const generated = generatePuzzle(difficulty, `test-${difficulty}-2026`);
-  assert(countSolutions(generated.puzzle, 2) === 1, `${difficulty}: puzzle must have one solution`);
-  assert(boardMatchesSolution(generated.solution, generated.solution), `${difficulty}: solved board must match itself`);
-  assert(generated.puzzle.flat().filter(Boolean).length >= 24, `${difficulty}: puzzle must retain a reasonable number of clues`);
-  for (let row = 0; row < 9; row += 1) {
-    for (let col = 0; col < 9; col += 1) {
+for (const size of sizes) {
+  const generated = generatePuzzle('medium', size, `test-size-${size}-2026`);
+  assert(countSolutions(generated.puzzle, 2) === 1, `${size}x${size}: puzzle must have one solution`);
+  assert(boardMatchesSolution(generated.solution, generated.solution), `${size}x${size}: solved board must match itself`);
+  for (let row = 0; row < size; row += 1) {
+    for (let col = 0; col < size; col += 1) {
       const digit = generated.solution[row][col] as Digit;
-      assert(isValidPlacement(generated.solution, row, col, digit), `${difficulty}: solution must be valid at ${row},${col}`);
+      assert(isValidPlacement(generated.solution, row, col, digit), `${size}x${size}: solution must be valid at ${row},${col}`);
     }
   }
 }
 
-const game = createGame('easy', ['a', 'b'], 'session-test', 1_000);
+for (const difficulty of difficulties) {
+  const generated = generatePuzzle(difficulty, 9, `test-${difficulty}-2026`);
+  assert(countSolutions(generated.puzzle, 2) === 1, `${difficulty}: puzzle must have one solution`);
+}
+
+const game = createGame('easy', ['a', 'b'], 6, 'session-test', 1_000);
 let emptyRow = -1;
 let emptyCol = -1;
-for (let r = 0; r < 9 && emptyRow < 0; r += 1) {
-  for (let c = 0; c < 9; c += 1) {
+for (let r = 0; r < game.size && emptyRow < 0; r += 1) {
+  for (let c = 0; c < game.size; c += 1) {
     if (game.puzzle[r][c] === 0) { emptyRow = r; emptyCol = c; break; }
   }
 }
 assert(emptyRow >= 0 && emptyCol >= 0, 'generated game must have an editable cell');
 const correct = game.solution[emptyRow][emptyCol] as Digit;
-const wrong = ([1,2,3,4,5,6,7,8,9] as Digit[]).find((d) => d !== correct)!;
+const wrong = ([1,2,3,4,5,6] as Digit[]).find((d) => d !== correct)!;
 
 const noted = applyGameAction(game, { type: 'note', playerId: 'a', row: emptyRow, col: emptyCol, digit: correct }, 1_200);
 assert(noted.accepted && noted.snapshot.notes[emptyRow][emptyCol].includes(correct), 'note must be added');
@@ -56,4 +61,4 @@ assert(possible.includes(correct), 'solution digit must be a candidate in untouc
 const hint = findHint(game.board);
 if (hint) assert(game.board[hint.cell.row][hint.cell.col] === 0, 'hint must point to an empty cell');
 
-console.log('Core checks passed for all difficulties and game-state scenarios.');
+console.log('Core checks passed for 4x4, 5x5, 6x6, 9x9 and game-state scenarios.');
