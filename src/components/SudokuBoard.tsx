@@ -1,4 +1,4 @@
-import { memo, useRef, type PointerEvent as ReactPointerEvent } from 'react';
+import { memo, useRef, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import type { Board, Coordinate, Digit, Hint, NotesGrid } from '../game/types';
 
 type PaintMode = 'add' | 'erase';
@@ -12,9 +12,11 @@ export const SudokuBoard = memo(function SudokuBoard({
   remoteSelected,
   hint,
   notesMode,
+  eraserMode,
   lockedDigit,
   onSelect,
   onPaintCell,
+  onEraseCell,
 }: {
   puzzle: Board;
   board: Board;
@@ -24,11 +26,14 @@ export const SudokuBoard = memo(function SudokuBoard({
   remoteSelected: Coordinate | null;
   hint: Hint | null;
   notesMode: boolean;
+  eraserMode: boolean;
   lockedDigit: Digit | null;
   onSelect: (row: number, col: number) => void;
   onPaintCell: (row: number, col: number, mode: PaintMode) => void;
+  onEraseCell: (row: number, col: number) => void;
 }) {
   const painting = useRef(false);
+  const gesture = useRef<'digit' | 'eraser' | null>(null);
   const paintMode = useRef<PaintMode>('add');
   const paintedCells = useRef(new Set<string>());
   const selectedValue = lockedDigit ?? (selected ? board[selected.row][selected.col] : 0);
@@ -43,7 +48,7 @@ export const SudokuBoard = memo(function SudokuBoard({
 
   const hintRelated = new Set(hint?.related.map((cell) => `${cell.row}:${cell.col}`) ?? []);
 
-  const shouldAffectCell = (row: number, col: number) => {
+  const shouldAffectDigitCell = (row: number, col: number) => {
     if (!lockedDigit || puzzle[row][col] !== 0) return false;
 
     if (notesMode) {
@@ -57,50 +62,91 @@ export const SudokuBoard = memo(function SudokuBoard({
       : board[row][col] === 0;
   };
 
-  const paintCell = (row: number, col: number) => {
+  const paintDigitCell = (row: number, col: number) => {
     if (!lockedDigit || puzzle[row][col] !== 0) return;
     const key = `${row}:${col}`;
     if (paintedCells.current.has(key)) return;
     paintedCells.current.add(key);
     onSelect(row, col);
-    if (shouldAffectCell(row, col)) onPaintCell(row, col, paintMode.current);
+    if (shouldAffectDigitCell(row, col)) onPaintCell(row, col, paintMode.current);
+  };
+
+  const eraseCell = (row: number, col: number) => {
+    if (puzzle[row][col] !== 0) return;
+    const key = `${row}:${col}`;
+    if (paintedCells.current.has(key)) return;
+    paintedCells.current.add(key);
+    onSelect(row, col);
+    if (board[row][col] !== 0 || notes[row][col].length > 0) onEraseCell(row, col);
   };
 
   const beginPaint = (row: number, col: number, event: ReactPointerEvent<HTMLButtonElement>) => {
-    if (!lockedDigit || puzzle[row][col] !== 0) return;
-
-    paintMode.current = notesMode
-      ? notes[row][col].includes(lockedDigit) ? 'erase' : 'add'
-      : board[row][col] === lockedDigit ? 'erase' : 'add';
+    if (puzzle[row][col] !== 0 || (!eraserMode && !lockedDigit)) return;
 
     event.preventDefault();
     painting.current = true;
     paintedCells.current.clear();
     event.currentTarget.setPointerCapture?.(event.pointerId);
-    paintCell(row, col);
+
+    if (eraserMode) {
+      gesture.current = 'eraser';
+      eraseCell(row, col);
+      return;
+    }
+
+    gesture.current = 'digit';
+    paintMode.current = notesMode
+      ? notes[row][col].includes(lockedDigit as Digit) ? 'erase' : 'add'
+      : board[row][col] === lockedDigit ? 'erase' : 'add';
+    paintDigitCell(row, col);
   };
 
   const movePaint = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (!painting.current || !lockedDigit) return;
+    if (!painting.current) return;
     event.preventDefault();
     const target = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>('[data-sudoku-cell]');
     if (!target) return;
     const row = Number(target.dataset.row);
     const col = Number(target.dataset.col);
     if (!Number.isInteger(row) || !Number.isInteger(col)) return;
-    paintCell(row, col);
+
+    if (gesture.current === 'eraser') eraseCell(row, col);
+    else if (gesture.current === 'digit') paintDigitCell(row, col);
   };
 
   const endPaint = () => {
     painting.current = false;
+    gesture.current = null;
     paintedCells.current.clear();
+  };
+
+  const handleKeyboardClick = (row: number, col: number, event: ReactMouseEvent<HTMLButtonElement>) => {
+    if (event.detail !== 0) {
+      if (!eraserMode && !lockedDigit) onSelect(row, col);
+      return;
+    }
+
+    if (eraserMode) {
+      onEraseCell(row, col);
+      return;
+    }
+
+    if (lockedDigit) {
+      const mode: PaintMode = notesMode
+        ? notes[row][col].includes(lockedDigit) ? 'erase' : 'add'
+        : board[row][col] === lockedDigit ? 'erase' : 'add';
+      onPaintCell(row, col, mode);
+      return;
+    }
+
+    onSelect(row, col);
   };
 
   return (
     <div
-      className={`sudoku-board ${notesMode ? 'notes-mode' : ''} ${lockedDigit ? 'paint-mode' : ''}`}
+      className={`sudoku-board ${notesMode ? 'notes-mode' : ''} ${lockedDigit ? 'paint-mode' : ''} ${eraserMode ? 'eraser-mode' : ''}`}
       role="grid"
-      aria-label={lockedDigit ? `Поле судоку. Закреплена цифра ${lockedDigit}` : 'Поле судоку'}
+      aria-label={eraserMode ? 'Поле судоку. Включён ластик' : lockedDigit ? `Поле судоку. Закреплена цифра ${lockedDigit}` : 'Поле судоку'}
       onPointerMove={movePaint}
       onPointerUp={endPaint}
       onPointerCancel={endPaint}
@@ -134,7 +180,7 @@ export const SudokuBoard = memo(function SudokuBoard({
             data-sudoku-cell
             data-row={r}
             data-col={c}
-            onClick={() => onSelect(r, c)}
+            onClick={(event) => handleKeyboardClick(r, c, event)}
             onPointerDown={(event) => beginPaint(r, c, event)}
             role="gridcell"
             aria-label={`Строка ${r + 1}, столбец ${c + 1}${value ? `, число ${value}` : ', пусто'}${isGiven ? ', заданная цифра' : ''}`}
