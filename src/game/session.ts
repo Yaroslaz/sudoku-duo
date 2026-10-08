@@ -8,7 +8,9 @@ export type GameAction =
   | { type: 'note'; playerId: string; row: number; col: number; digit: Digit }
   | { type: 'pause'; playerId: string; at: number }
   | { type: 'resume'; playerId: string; at: number }
-  | { type: 'hint'; playerId: string };
+  | { type: 'hint'; playerId: string }
+  | { type: 'undo'; playerId: string }
+  | { type: 'redo'; playerId: string };
 
 export type ActionResult = {
   snapshot: GameSnapshot;
@@ -91,6 +93,9 @@ export function applyGameAction(snapshot: GameSnapshot, action: GameAction, now 
     next.scores[action.playerId] = scoreHint(ensureScore(next, action.playerId));
     return { snapshot: next, accepted: true };
   }
+
+  // Undo/redo are resolved by the authoritative session history in App.
+  if (action.type === 'undo' || action.type === 'redo') return { snapshot, accepted: false };
 
   if (next.pausedAt !== null || !editable(next, action.row, action.col)) return { snapshot, accepted: false };
 
