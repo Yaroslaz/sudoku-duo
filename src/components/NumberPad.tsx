@@ -7,7 +7,7 @@ import type { BoardSize, Digit } from '../game/types';
 const LONG_PRESS_MS = 360;
 const MOVE_CANCEL_PX = 8;
 
-export function NumberPad({ size, notesMode, eraserMode, hintActive, disabled, remaining, lockedDigit, activeDigit, canUndo, canRedo, onDigit, onToggleNotes, onToggleEraser, onEraseSelected, onHint, onLockDigit, onActiveDigit, onUndo, onRedo }: {
+export function NumberPad({ size, notesMode, eraserMode, hintActive, disabled, remaining, lockedDigit, activeDigit, canUndo = true, canRedo = true, onDigit, onToggleNotes, onToggleEraser, onEraseSelected, onHint, onLockDigit, onActiveDigit, onUndo, onRedo }: {
   size: BoardSize;
   notesMode: boolean;
   eraserMode: boolean;
@@ -16,8 +16,8 @@ export function NumberPad({ size, notesMode, eraserMode, hintActive, disabled, r
   remaining: Record<number, number>;
   lockedDigit: Digit | null;
   activeDigit: Digit | null;
-  canUndo: boolean;
-  canRedo: boolean;
+  canUndo?: boolean;
+  canRedo?: boolean;
   onDigit: (digit: Digit) => void;
   onToggleNotes: () => void;
   onToggleEraser: () => void;
@@ -25,8 +25,8 @@ export function NumberPad({ size, notesMode, eraserMode, hintActive, disabled, r
   onHint: () => void;
   onLockDigit: (digit: Digit | null) => void;
   onActiveDigit: (digit: Digit | null) => void;
-  onUndo: () => void;
-  onRedo: () => void;
+  onUndo?: () => void;
+  onRedo?: () => void;
 }) {
   const holdTimer = useRef<number | null>(null);
   const heldDigit = useRef<Digit | null>(null);
@@ -127,6 +127,9 @@ export function NumberPad({ size, notesMode, eraserMode, hintActive, disabled, r
     onEraseSelected();
   };
 
+  const requestUndo = () => onUndo ? onUndo() : window.dispatchEvent(new Event('sudoku-duo:undo'));
+  const requestRedo = () => onRedo ? onRedo() : window.dispatchEvent(new Event('sudoku-duo:redo'));
+
   return (
     <Stack gap={10} className={`number-pad-wrap ${notesMode ? 'notes-active' : ''}`}>
       <Group justify="space-around" gap={0} className="tool-row">
@@ -186,11 +189,11 @@ export function NumberPad({ size, notesMode, eraserMode, hintActive, disabled, r
       </div>
 
       <Group justify="center" gap="xl" className="history-controls" role="group" aria-label="История ходов">
-        <button type="button" className="history-button pressable-control" onClick={onUndo} disabled={disabled || !canUndo} aria-label="Отменить последний ход">
+        <button type="button" className="history-button pressable-control" onClick={requestUndo} disabled={disabled || !canUndo} aria-label="Отменить последний ход">
           <IconArrowBackUp size={23} stroke={1.8} />
           <Text component="span" size="xs">Назад</Text>
         </button>
-        <button type="button" className="history-button pressable-control" onClick={onRedo} disabled={disabled || !canRedo} aria-label="Вернуть отменённый ход">
+        <button type="button" className="history-button pressable-control" onClick={requestRedo} disabled={disabled || !canRedo} aria-label="Вернуть отменённый ход">
           <IconArrowForwardUp size={23} stroke={1.8} />
           <Text component="span" size="xs">Вперёд</Text>
         </button>
