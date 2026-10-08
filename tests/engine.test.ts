@@ -1,38 +1,47 @@
 import { describe, expect, it } from 'vitest';
 import { boardMatchesSolution, countSolutions, generatePuzzle, isValidPlacement } from '../src/game/engine';
 import { applyGameAction, createGame, elapsedMs } from '../src/game/session';
-import type { Difficulty, Digit } from '../src/game/types';
+import type { BoardSize, Difficulty, Digit } from '../src/game/types';
 
 describe('Sudoku generator', () => {
   const difficulties: Difficulty[] = ['easy', 'medium', 'hard', 'expert'];
+  const sizes: BoardSize[] = [4, 5, 6, 9];
 
-  for (const difficulty of difficulties) {
-    it(`creates a valid unique ${difficulty} puzzle`, () => {
-      const generated = generatePuzzle(difficulty, `vitest-${difficulty}-2026`);
+  for (const size of sizes) {
+    it(`creates a valid unique ${size}x${size} puzzle`, () => {
+      const generated = generatePuzzle('medium', size, `vitest-size-${size}-2026`);
       expect(countSolutions(generated.puzzle, 2)).toBe(1);
       expect(boardMatchesSolution(generated.solution, generated.solution)).toBe(true);
-      for (let row = 0; row < 9; row += 1) {
-        for (let col = 0; col < 9; col += 1) {
+      for (let row = 0; row < size; row += 1) {
+        for (let col = 0; col < size; col += 1) {
           const digit = generated.solution[row][col] as Digit;
           expect(isValidPlacement(generated.solution, row, col, digit)).toBe(true);
         }
       }
     });
   }
+
+  for (const difficulty of difficulties) {
+    it(`creates a valid unique 9x9 ${difficulty} puzzle`, () => {
+      const generated = generatePuzzle(difficulty, 9, `vitest-${difficulty}-2026`);
+      expect(countSolutions(generated.puzzle, 2)).toBe(1);
+      expect(boardMatchesSolution(generated.solution, generated.solution)).toBe(true);
+    });
+  }
 });
 
 describe('Shared game state', () => {
   it('synchronizes notes, scoring and pause time in the snapshot', () => {
-    const game = createGame('easy', ['host', 'guest'], 'vitest-session', 1_000);
+    const game = createGame('easy', ['host', 'guest'], 6, 'vitest-session', 1_000);
     let row = 0;
     let col = 0;
-    outer: for (let r = 0; r < 9; r += 1) {
-      for (let c = 0; c < 9; c += 1) {
+    outer: for (let r = 0; r < game.size; r += 1) {
+      for (let c = 0; c < game.size; c += 1) {
         if (game.puzzle[r][c] === 0) { row = r; col = c; break outer; }
       }
     }
     const correct = game.solution[row][col] as Digit;
-    const wrong = ([1,2,3,4,5,6,7,8,9] as Digit[]).find((digit) => digit !== correct)!;
+    const wrong = ([1, 2, 3, 4, 5, 6] as Digit[]).find((digit) => digit !== correct)!;
 
     const note = applyGameAction(game, { type: 'note', playerId: 'host', row, col, digit: correct });
     expect(note.snapshot.notes[row][col]).toContain(correct);
