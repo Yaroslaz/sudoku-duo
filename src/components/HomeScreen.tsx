@@ -1,5 +1,4 @@
 import {
-  Badge,
   Button,
   Container,
   Group,
@@ -49,7 +48,6 @@ export function HomeScreen({
         <Paper className="home-hero" radius="xl" p="xl" shadow="sm">
           <Stack gap="lg">
             <Stack gap="xs">
-              <Badge color="indigo" variant="light" radius="xl" w="fit-content">Совместное судоку</Badge>
               <Title order={1} className="home-title">Решайте одно поле вместе</Title>
               <Text c="dimmed" size="md" maw={520}>
                 В реальном времени видно выбранную клетку, заметки и ходы второго игрока. Для подключения достаточно двух телефонов и QR-кодов.
@@ -90,11 +88,9 @@ export function HomeScreen({
 
         <Paper radius="xl" p="lg" shadow="xs" className="solo-card">
           <Stack gap="md">
-            <Group justify="space-between" align="center">
-              <Group gap="sm">
-                <ThemeIcon variant="light" color="gray" radius="xl" size="lg"><IconUser size={18} /></ThemeIcon>
-                <Stack gap={0}><Text fw={700}>Играть одному</Text><Text size="xs" c="dimmed">Выбери сложность</Text></Stack>
-              </Group>
+            <Group gap="sm">
+              <ThemeIcon variant="light" color="gray" radius="xl" size="lg"><IconUser size={18} /></ThemeIcon>
+              <Stack gap={0}><Text fw={700}>Играть одному</Text><Text size="xs" c="dimmed">Выбери сложность</Text></Stack>
             </Group>
             <SimpleGrid cols={{ base: 2, xs: 4 }} spacing="sm">
               {(Object.keys(difficultyLabels) as Difficulty[]).map((difficulty) => (
