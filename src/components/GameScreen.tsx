@@ -12,7 +12,6 @@ import {
 } from '@mantine/core';
 import {
   IconArrowLeft,
-  IconBulb,
   IconCheck,
   IconHelpCircle,
   IconPlayerPause,
@@ -239,22 +238,9 @@ export function GameScreen({
           onDigit={digit}
           onToggleNotes={toggleNotes}
           onClear={clear}
+          onHint={askHint}
           onLockDigit={setLockedDigit}
         />
-
-        <Group justify="center" mt="xs" gap="xl" className="secondary-tools">
-          <ActionIcon
-            variant="light"
-            color="yellow"
-            radius="xl"
-            size={52}
-            onClick={askHint}
-            disabled={paused || Boolean(snapshot.completedAt)}
-            aria-label="Показать подсказку"
-          >
-            <IconBulb size={24} stroke={2} />
-          </ActionIcon>
-        </Group>
       </section>
 
       {paused && (
