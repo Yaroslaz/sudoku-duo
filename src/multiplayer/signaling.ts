@@ -47,7 +47,9 @@ async function compress(text: string): Promise<{ codec: 'g' | 'r'; data: Uint8Ar
 async function decompress(codec: string, bytes: Uint8Array): Promise<string> {
   if (codec === 'g') {
     if (!('DecompressionStream' in globalThis)) throw new Error('Этот браузер не умеет распаковывать код соединения. Обнови браузер.');
-    const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+    const buffer = new ArrayBuffer(bytes.byteLength);
+    new Uint8Array(buffer).set(bytes);
+    const stream = new Blob([buffer]).stream().pipeThrough(new DecompressionStream('gzip'));
     return await new Response(stream).text();
   }
   return new TextDecoder().decode(bytes);
