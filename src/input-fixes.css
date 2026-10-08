@@ -39,6 +39,25 @@
   background: #f3f6f9;
 }
 
+/* Tapping any filled cell highlights every equal symbol, including givens. */
+.reference-game .sudoku-cell.same-value,
+.reference-game .sudoku-cell.same-value.given,
+.reference-game .sudoku-cell.same-value.editable {
+  background: #d9e9f8 !important;
+  color: #205f9f !important;
+}
+
+.reference-game .sudoku-cell.same-value .cell-value {
+  color: #205f9f !important;
+  font-weight: 650;
+}
+
+.reference-game .sudoku-cell.same-value.selected-local {
+  background: #acd8f4 !important;
+  color: #185d9f !important;
+  box-shadow: inset 0 0 0 2px rgba(49, 106, 177, .2);
+}
+
 /* Matching candidates stay readable when the same symbol is active on the number pad. */
 .reference-game .notes-grid span.note-match {
   width: 1.45em;
