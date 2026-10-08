@@ -26,7 +26,7 @@ function offlineServiceWorker(): Plugin {
 const APP_VERSION = '${APP_VERSION}';
 const CACHE = 'sudoku-duo-v${APP_VERSION}-${buildId}';
 const PRECACHE = ${JSON.stringify(precache)};
-const FORCE_REFRESH_LEGACY_CLIENTS = APP_VERSION === '1.4.5';
+const FORCE_REFRESH_LEGACY_CLIENTS = APP_VERSION === '1.4.6';
 
 self.addEventListener('install', (event) => {
   event.waitUntil((async () => {
