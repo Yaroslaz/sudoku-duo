@@ -7,22 +7,26 @@ const LONG_PRESS_MS = 360;
 
 export function NumberPad({
   notesMode,
+  eraserMode,
+  hintActive,
   disabled,
   remaining,
   lockedDigit,
   onDigit,
   onToggleNotes,
-  onClear,
+  onToggleEraser,
   onHint,
   onLockDigit,
 }: {
   notesMode: boolean;
+  eraserMode: boolean;
+  hintActive: boolean;
   disabled: boolean;
   remaining: Record<number, number>;
   lockedDigit: Digit | null;
   onDigit: (digit: Digit) => void;
   onToggleNotes: () => void;
-  onClear: () => void;
+  onToggleEraser: () => void;
   onHint: () => void;
   onLockDigit: (digit: Digit | null) => void;
 }) {
@@ -58,44 +62,46 @@ export function NumberPad({
   };
 
   return (
-    <Stack gap={8} className={`number-pad-wrap ${notesMode ? 'notes-active' : ''}`}>
+    <Stack gap={10} className={`number-pad-wrap ${notesMode ? 'notes-active' : ''}`}>
       <Group justify="space-around" gap={0} className="tool-row">
         <ActionIcon
-          variant="subtle"
-          color="gray"
+          variant={eraserMode ? 'light' : 'subtle'}
+          color={eraserMode ? 'indigo' : 'gray'}
           radius="xl"
-          size={50}
-          onClick={onClear}
+          size={52}
+          onClick={onToggleEraser}
           disabled={disabled}
-          aria-label="Стереть значение"
-          className="reference-tool"
+          aria-pressed={eraserMode}
+          aria-label={eraserMode ? 'Выключить ластик' : 'Включить ластик'}
+          className="reference-tool pressable-control"
         >
-          <IconEraser size={29} stroke={1.75} />
+          <IconEraser size={30} stroke={1.75} />
         </ActionIcon>
         <ActionIcon
           variant={notesMode ? 'light' : 'subtle'}
           color={notesMode ? 'indigo' : 'gray'}
           radius="xl"
-          size={50}
-          className="reference-tool mode-button"
+          size={52}
+          className="reference-tool pressable-control"
           onClick={onToggleNotes}
           disabled={disabled}
           aria-pressed={notesMode}
           aria-label={notesMode ? 'Выключить заметки' : 'Включить заметки'}
         >
-          <IconPencil size={28} stroke={1.75} />
+          <IconPencil size={29} stroke={1.75} />
         </ActionIcon>
         <ActionIcon
-          variant="subtle"
-          color="gray"
+          variant={hintActive ? 'light' : 'subtle'}
+          color={hintActive ? 'yellow' : 'gray'}
           radius="xl"
-          size={50}
+          size={52}
           onClick={onHint}
           disabled={disabled}
+          aria-pressed={hintActive}
           aria-label="Показать подсказку"
-          className="reference-tool"
+          className="reference-tool pressable-control"
         >
-          <IconBulb size={29} stroke={1.75} />
+          <IconBulb size={30} stroke={1.75} />
         </ActionIcon>
       </Group>
 
@@ -108,7 +114,7 @@ export function NumberPad({
             <button
               key={digit}
               type="button"
-              className={`number-button ${locked ? 'locked' : ''} ${notesMode ? 'note-number' : ''}`}
+              className={`number-button pressable-control ${locked ? 'locked' : ''} ${notesMode ? 'note-number' : ''}`}
               disabled={disabled || (unavailable && !locked)}
               aria-pressed={locked}
               aria-label={locked ? `Цифра ${digit} закреплена. Удерживай, чтобы снять закрепление` : `Ввести ${digit}. Удерживай, чтобы закрепить`}
