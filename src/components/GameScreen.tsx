@@ -1,6 +1,5 @@
 import {
   ActionIcon,
-  Avatar,
   Button,
   Group,
   Modal,
@@ -167,50 +166,68 @@ export function GameScreen({
       : { type: 'pause', playerId: localPlayer.id, at: Date.now() });
   };
 
-  return (
-    <main className={`game-shell ${notesMode ? 'notes-mode-active' : ''} ${lockedDigit ? 'locked-mode-active' : ''}`}>
-      <Paper className="game-topbar" radius="xl" p={6} shadow="xs">
-        <ActionIcon variant="subtle" color="gray" size="lg" radius="xl" aria-label="Выйти из игры" onClick={() => setLeaveOpen(true)}>
-          <IconArrowLeft size={20} stroke={2} />
-        </ActionIcon>
-        <Stack gap={0} align="center">
-          <Text size="xs" c="dimmed">{difficultyLabels[snapshot.difficulty]}</Text>
-          <Text fw={750} className="timer">{formatDuration(elapsedMs(snapshot, now))}</Text>
-        </Stack>
-        <ActionIcon
-          variant={paused ? 'filled' : 'subtle'}
-          color={paused ? 'indigo' : 'gray'}
-          size="lg"
-          radius="xl"
-          aria-label={paused ? 'Продолжить игру' : 'Поставить на паузу'}
-          onClick={togglePause}
-          disabled={Boolean(snapshot.completedAt)}
-        >
-          {paused ? <IconPlayerPlay size={20} stroke={2} /> : <IconPlayerPause size={20} stroke={2} />}
-        </ActionIcon>
-        <ActionIcon variant="subtle" color="gray" size="lg" radius="xl" aria-label="Открыть правила" onClick={() => setRulesOpen(true)}>
-          <IconHelpCircle size={20} stroke={2} />
-        </ActionIcon>
-      </Paper>
+  const scoreText = remotePlayer
+    ? `${localScore?.score ?? 0} : ${remoteScore?.score ?? 0}`
+    : String(localScore?.score ?? 0);
 
-      <div className="game-meta-row">
-        <PlayerScore player={localPlayer} score={localScore?.score ?? 0} active />
-        {remotePlayer && <PlayerScore player={remotePlayer} score={remoteScore?.score ?? 0} />}
-        {peerState && (
-          <span
-            className={`connection-status ${peerState === 'connected' ? 'connected' : 'disconnected'}`}
-            aria-label={peerState === 'connected' ? 'Соединение со вторым игроком активно' : 'Соединение со вторым игроком потеряно'}
-            title={latency === null ? undefined : `${latency} мс`}
+  return (
+    <main className={`game-shell reference-game ${notesMode ? 'notes-mode-active' : ''} ${lockedDigit ? 'locked-mode-active' : ''}`}>
+      <header className="reference-header">
+        <ActionIcon variant="subtle" color="indigo" size={48} radius="xl" aria-label="Выйти из игры" onClick={() => setLeaveOpen(true)}>
+          <IconArrowLeft size={31} stroke={1.8} />
+        </ActionIcon>
+        <Text className="reference-progress" fw={700}>{localScore?.correct ?? 0}</Text>
+        <Group gap={4} wrap="nowrap">
+          <ActionIcon variant="subtle" color="indigo" size={48} radius="xl" aria-label="Открыть правила" onClick={() => setRulesOpen(true)}>
+            <IconHelpCircle size={29} stroke={1.8} />
+          </ActionIcon>
+          {peerState && (
+            <span
+              className={`reference-connection ${peerState === 'connected' ? 'connected' : 'disconnected'}`}
+              aria-label={peerState === 'connected' ? 'Соединение активно' : 'Соединение потеряно'}
+              title={latency === null ? undefined : `${latency} мс`}
+            >
+              {peerState === 'connected' ? <IconWifi size={27} stroke={1.8} /> : <IconWifiOff size={27} stroke={1.8} />}
+            </span>
+          )}
+        </Group>
+      </header>
+
+      <section className="reference-stats" aria-label="Статистика игры">
+        <div className="reference-stat">
+          <Text className="reference-stat-label">Счёт</Text>
+          <Text className="reference-stat-value">{scoreText}</Text>
+        </div>
+        <div className="reference-stat">
+          <Text className="reference-stat-label">Уровень</Text>
+          <Text className="reference-stat-value">{difficultyLabels[snapshot.difficulty]}</Text>
+        </div>
+        <div className="reference-stat">
+          <Text className="reference-stat-label">Ошибки</Text>
+          <Text className="reference-stat-value">{localScore?.mistakes ?? 0}</Text>
+        </div>
+        <div className="reference-stat reference-time-stat">
+          <div>
+            <Text className="reference-stat-label">Время</Text>
+            <Text className="reference-stat-value timer">{formatDuration(elapsedMs(snapshot, now))}</Text>
+          </div>
+          <ActionIcon
+            variant="light"
+            color="gray"
+            size={44}
+            radius="xl"
+            aria-label={paused ? 'Продолжить игру' : 'Поставить на паузу'}
+            onClick={togglePause}
+            disabled={Boolean(snapshot.completedAt)}
+            className="reference-pause"
           >
-            {peerState === 'connected' ? <IconWifi size={18} /> : <IconWifiOff size={18} />}
-          </span>
-        )}
-      </div>
+            {paused ? <IconPlayerPlay size={24} stroke={1.8} /> : <IconPlayerPause size={24} stroke={1.8} />}
+          </ActionIcon>
+        </div>
+      </section>
 
       {peerState && peerState !== 'connected' && (
-        <Paper className="connection-warning" radius="lg" p="xs" withBorder>
-          <Text size="xs">Связь со вторым телефоном прервалась. Поле сохранено на этом устройстве.</Text>
-        </Paper>
+        <div className="reference-connection-warning">Связь со вторым телефоном прервалась</div>
       )}
 
       <section className="board-section">
@@ -289,19 +306,5 @@ export function GameScreen({
         </Stack>
       </Modal>
     </main>
-  );
-}
-
-function PlayerScore({ player, score, active = false }: { player: Player; score: number; active?: boolean }) {
-  return (
-    <Group gap={7} wrap="nowrap" className="player-score">
-      <Avatar size={28} radius="xl" color={player.color === 'coral' ? 'orange' : 'indigo'} variant="light">
-        {player.name.slice(0, 1)}
-      </Avatar>
-      <Stack gap={0}>
-        <Text size="xs" c="dimmed">{active ? 'Ты' : player.name}</Text>
-        <Text size="sm" fw={750} className="score-value">{score}</Text>
-      </Stack>
-    </Group>
   );
 }
