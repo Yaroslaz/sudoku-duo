@@ -11,6 +11,7 @@ export const SudokuBoard = memo(function SudokuBoard({
   solution,
   notes,
   selected,
+  localColor,
   remoteSelected,
   remoteColor,
   hint,
@@ -26,6 +27,7 @@ export const SudokuBoard = memo(function SudokuBoard({
   solution: Board;
   notes: NotesGrid;
   selected: Coordinate | null;
+  localColor?: PlayerColor | null;
   remoteSelected: Coordinate | null;
   remoteColor?: PlayerColor | null;
   hint: Hint | null;
@@ -88,13 +90,11 @@ export const SudokuBoard = memo(function SudokuBoard({
     activePointer.current = event.pointerId;
     paintedCells.current.clear();
     boardRef.current?.setPointerCapture?.(event.pointerId);
-
     if (eraserMode) {
       gesture.current = 'eraser';
       eraseCell(row, col);
       return;
     }
-
     gesture.current = 'digit';
     paintMode.current = notesMode
       ? notes[row][col].includes(lockedDigit as Digit) ? 'erase' : 'add'
@@ -116,9 +116,7 @@ export const SudokuBoard = memo(function SudokuBoard({
 
   const endPaint = (event?: ReactPointerEvent<HTMLDivElement>) => {
     if (event && activePointer.current !== null && event.pointerId !== activePointer.current) return;
-    if (activePointer.current !== null && boardRef.current?.hasPointerCapture?.(activePointer.current)) {
-      boardRef.current.releasePointerCapture?.(activePointer.current);
-    }
+    if (activePointer.current !== null && boardRef.current?.hasPointerCapture?.(activePointer.current)) boardRef.current.releasePointerCapture?.(activePointer.current);
     activePointer.current = null;
     painting.current = false;
     gesture.current = null;
@@ -132,9 +130,7 @@ export const SudokuBoard = memo(function SudokuBoard({
     }
     if (eraserMode) return onEraseCell(row, col);
     if (lockedDigit) {
-      const mode: PaintMode = notesMode
-        ? notes[row][col].includes(lockedDigit) ? 'erase' : 'add'
-        : board[row][col] === lockedDigit ? 'erase' : 'add';
+      const mode: PaintMode = notesMode ? notes[row][col].includes(lockedDigit) ? 'erase' : 'add' : board[row][col] === lockedDigit ? 'erase' : 'add';
       return onPaintCell(row, col, mode);
     }
     onSelect(row, col);
@@ -142,20 +138,12 @@ export const SudokuBoard = memo(function SudokuBoard({
 
   const boardStyle = {
     '--board-size': size,
+    '--local-color': localColor ? playerColorHex[localColor] : '#3174b8',
     '--remote-color': remoteColor ? playerColorHex[remoteColor] : '#e38445',
   } as CSSProperties;
 
   return (
-    <div
-      ref={boardRef}
-      className={`sudoku-board size-${size} ${notesMode ? 'notes-mode' : ''} ${lockedDigit ? 'paint-mode' : ''} ${eraserMode ? 'eraser-mode' : ''}`}
-      style={boardStyle}
-      role="grid"
-      aria-label={eraserMode ? 'Поле судоку. Включён ластик' : lockedDigit ? `Поле судоку. Закреплена цифра ${lockedDigit}` : 'Поле судоку'}
-      onPointerMove={movePaint}
-      onPointerUp={endPaint}
-      onPointerCancel={endPaint}
-    >
+    <div ref={boardRef} className={`sudoku-board size-${size} ${notesMode ? 'notes-mode' : ''} ${lockedDigit ? 'paint-mode' : ''} ${eraserMode ? 'eraser-mode' : ''}`} style={boardStyle} role="grid" aria-label={eraserMode ? 'Поле судоку. Включён ластик' : lockedDigit ? `Поле судоку. Закреплена цифра ${lockedDigit}` : 'Поле судоку'} onPointerMove={movePaint} onPointerUp={endPaint} onPointerCancel={endPaint}>
       {board.map((row, r) => row.map((value, c) => {
         const isGiven = puzzle[r][c] !== 0;
         const isSelected = selected?.row === r && selected?.col === c;
@@ -166,44 +154,12 @@ export const SudokuBoard = memo(function SudokuBoard({
         const currentRegion = regionId(size, r, c);
         const regionRight = c < size - 1 && regionId(size, r, c + 1) !== currentRegion;
         const regionBottom = r < size - 1 && regionId(size, r + 1, c) !== currentRegion;
-        const classNames = [
-          'sudoku-cell',
-          isGiven ? 'given' : 'editable',
-          relatedToSelection(r, c) ? 'related' : '',
-          isSameValue ? 'same-value' : '',
-          isSelected ? 'selected-local' : '',
-          isRemote ? 'selected-remote' : '',
-          isWrong ? 'wrong' : '',
-          isHintCell ? 'hint-target' : '',
-          hintRelated.has(`${r}:${c}`) ? 'hint-related' : '',
-          regionRight ? 'region-right' : '',
-          regionBottom ? 'region-bottom' : '',
-          c === size - 1 ? 'last-col' : '',
-          r === size - 1 ? 'last-row' : '',
-        ].filter(Boolean).join(' ');
-
+        const classNames = ['sudoku-cell', isGiven ? 'given' : 'editable', relatedToSelection(r, c) ? 'related' : '', isSameValue ? 'same-value' : '', isSelected ? 'selected-local' : '', isRemote ? 'selected-remote' : '', isWrong ? 'wrong' : '', isHintCell ? 'hint-target' : '', hintRelated.has(`${r}:${c}`) ? 'hint-related' : '', regionRight ? 'region-right' : '', regionBottom ? 'region-bottom' : '', c === size - 1 ? 'last-col' : '', r === size - 1 ? 'last-row' : ''].filter(Boolean).join(' ');
         return (
-          <button
-            key={`${r}-${c}`}
-            className={classNames}
-            data-sudoku-cell
-            data-row={r}
-            data-col={c}
-            onClick={(event) => handleKeyboardClick(r, c, event)}
-            onPointerDown={(event) => beginPaint(r, c, event)}
-            role="gridcell"
-            aria-label={`Строка ${r + 1}, столбец ${c + 1}${value ? `, число ${value}` : ', пусто'}${isGiven ? ', заданная цифра' : ''}`}
-          >
+          <button key={`${r}-${c}`} className={classNames} data-sudoku-cell data-row={r} data-col={c} onClick={(event) => handleKeyboardClick(r, c, event)} onPointerDown={(event) => beginPaint(r, c, event)} role="gridcell" aria-label={`Строка ${r + 1}, столбец ${c + 1}${value ? `, число ${value}` : ', пусто'}${isGiven ? ', заданная цифра' : ''}`}>
             {value ? <span className="cell-value">{value}</span> : (
-              <span
-                className="notes-grid"
-                style={{ gridTemplateColumns: `repeat(${noteColumns}, 1fr)`, gridTemplateRows: `repeat(${noteRows}, 1fr)` }}
-                aria-label={notes[r][c].length ? `Заметки ${notes[r][c].join(', ')}` : undefined}
-              >
-                {Array.from({ length: size }, (_, index) => {
-                  const digit = (index + 1) as Digit;
-                  return <span key={digit}>{notes[r][c].includes(digit) ? digit : ''}</span>;
-                })}
+              <span className="notes-grid" style={{ gridTemplateColumns: `repeat(${noteColumns}, 1fr)`, gridTemplateRows: `repeat(${noteRows}, 1fr)` }} aria-label={notes[r][c].length ? `Заметки ${notes[r][c].join(', ')}` : undefined}>
+                {Array.from({ length: size }, (_, index) => { const digit = (index + 1) as Digit; return <span key={digit}>{notes[r][c].includes(digit) ? digit : ''}</span>; })}
               </span>
             )}
             {isRemote && <span className="remote-dot" aria-hidden="true" />}
