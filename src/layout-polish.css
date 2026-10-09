@@ -28,10 +28,16 @@
   display: none;
 }
 
+/* Transforming the canvas is more reliable on mobile Chromium than typed
+   arithmetic such as calc(100% * <number>). Transformed overflow remains
+   scrollable inside the viewport, so only the Sudoku board is magnified. */
 .reference-game .board-zoom-canvas {
-  width: calc(100% * var(--board-zoom, 1));
+  width: 100%;
   aspect-ratio: 1;
   min-width: 100%;
+  transform: scale(var(--board-zoom, 1));
+  transform-origin: 0 0;
+  will-change: transform;
 }
 
 .reference-game .board-zoom-canvas .sudoku-board {
@@ -75,13 +81,13 @@
   height: 100dvh;
   min-height: 100dvh;
   overflow: hidden;
-  padding-top: max(10px, var(--safe-top));
-  padding-bottom: max(10px, var(--safe-bottom));
+  padding-top: max(8px, var(--safe-top));
+  padding-bottom: max(8px, var(--safe-bottom));
 }
 
 .pairing-screen:has(.compact-qr-shell) > .mantine-Stack-root {
   height: 100%;
-  gap: clamp(8px, 1.7dvh, 16px) !important;
+  gap: clamp(7px, 1.45dvh, 13px) !important;
 }
 
 /* The explanatory sentence is available on the preceding step; remove it here
@@ -98,8 +104,16 @@
   display: block;
 }
 
-.pairing-screen:has(.compact-qr-shell) .mantine-Alert-root {
-  margin-top: 0;
+/* The caption under the QR duplicates the screen title and costs vertical
+   space on small phones. The image still keeps the same accessible alt text. */
+.pairing-screen:has(.compact-qr-shell) .compact-qr-shell + .mantine-Text-root {
+  display: none;
+}
+
+/* Internet-room help is optional on the QR hand-off screen. Keep errors, but
+   remove the long informational card; the same explanation is shown earlier. */
+.pairing-screen:has(.room-code-card) .mantine-Alert-root:has(.tabler-icon-world) {
+  display: none;
 }
 
 @media (max-height: 760px) {
@@ -110,10 +124,6 @@
   .pairing-screen:has(.compact-qr-shell) .compact-qr-shell img {
     width: min(64vw, 270px) !important;
     height: min(64vw, 270px) !important;
-  }
-
-  .pairing-screen:has(.compact-qr-shell) .mantine-Alert-root {
-    display: none;
   }
 }
 
