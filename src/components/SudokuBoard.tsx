@@ -1,9 +1,17 @@
-import { memo, useMemo, useRef, type CSSProperties, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react';
+import { memo, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type TouchEvent as ReactTouchEvent } from 'react';
 import { playerColorHex } from '../game/playerColors';
 import { candidates, regionCells, regionId, symbolForDigit } from '../game/engine';
 import type { Board, BoardSize, Coordinate, Digit, Hint, NotesGrid, PlayerColor } from '../game/types';
 
 type PaintMode = 'add' | 'erase';
+
+type ZoomGesture =
+  | { type: 'pinch'; distance: number; zoom: number }
+  | { type: 'pan'; x: number; y: number; left: number; top: number }
+  | null;
+
+const MIN_ZOOM = 1;
+const MAX_ZOOM = 2.8;
 
 export const SudokuBoard = memo(function SudokuBoard({
   puzzle,
@@ -42,6 +50,10 @@ export const SudokuBoard = memo(function SudokuBoard({
 }) {
   const size = board.length as BoardSize;
   const boardRef = useRef<HTMLDivElement>(null);
+  const zoomViewportRef = useRef<HTMLDivElement>(null);
+  const zoomRef = useRef(1);
+  const zoomGesture = useRef<ZoomGesture>(null);
+  const [zoom, setZoom] = useState(1);
   const painting = useRef(false);
   const gesture = useRef<'digit' | 'eraser' | null>(null);
   const paintMode = useRef<PaintMode>('add');
@@ -58,6 +70,20 @@ export const SudokuBoard = memo(function SudokuBoard({
       && !lockedDigit
       && !eraserMode,
   );
+
+  useEffect(() => {
+    zoomRef.current = zoom;
+  }, [zoom]);
+
+  useEffect(() => {
+    zoomRef.current = 1;
+    setZoom(1);
+    zoomGesture.current = null;
+    if (zoomViewportRef.current) {
+      zoomViewportRef.current.scrollLeft = 0;
+      zoomViewportRef.current.scrollTop = 0;
+    }
+  }, [size]);
 
   const teaching = useMemo(() => {
     const blocked = new Set<string>();
@@ -173,64 +199,157 @@ export const SudokuBoard = memo(function SudokuBoard({
     onSelect(row, col);
   };
 
+  const touchDistance = (first: ReactTouchEvent<HTMLDivElement>['touches'][number], second: ReactTouchEvent<HTMLDivElement>['touches'][number]) => Math.hypot(second.clientX - first.clientX, second.clientY - first.clientY);
+
+  const applyZoom = (nextZoom: number, clientX: number, clientY: number) => {
+    const viewport = zoomViewportRef.current;
+    if (!viewport) return;
+    const previousZoom = zoomRef.current;
+    const clamped = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, nextZoom));
+    const rect = viewport.getBoundingClientRect();
+    const localX = clientX - rect.left;
+    const localY = clientY - rect.top;
+    const contentX = (viewport.scrollLeft + localX) / previousZoom;
+    const contentY = (viewport.scrollTop + localY) / previousZoom;
+    zoomRef.current = clamped;
+    setZoom(clamped);
+    requestAnimationFrame(() => {
+      viewport.scrollLeft = contentX * clamped - localX;
+      viewport.scrollTop = contentY * clamped - localY;
+    });
+  };
+
+  const beginZoomGesture = (event: ReactTouchEvent<HTMLDivElement>) => {
+    if (size === 9) return;
+    if (event.touches.length >= 2) {
+      const first = event.touches[0];
+      const second = event.touches[1];
+      zoomGesture.current = { type: 'pinch', distance: touchDistance(first, second), zoom: zoomRef.current };
+      event.preventDefault();
+      return;
+    }
+    if (event.touches.length === 1 && zoomRef.current > 1.001 && !lockedDigit && !eraserMode) {
+      const viewport = zoomViewportRef.current;
+      const touch = event.touches[0];
+      if (viewport) {
+        zoomGesture.current = { type: 'pan', x: touch.clientX, y: touch.clientY, left: viewport.scrollLeft, top: viewport.scrollTop };
+      }
+    }
+  };
+
+  const moveZoomGesture = (event: ReactTouchEvent<HTMLDivElement>) => {
+    if (size === 9) return;
+    if (event.touches.length >= 2) {
+      const first = event.touches[0];
+      const second = event.touches[1];
+      if (zoomGesture.current?.type !== 'pinch') {
+        zoomGesture.current = { type: 'pinch', distance: touchDistance(first, second), zoom: zoomRef.current };
+      }
+      const start = zoomGesture.current;
+      if (start.type !== 'pinch' || start.distance <= 0) return;
+      event.preventDefault();
+      const centerX = (first.clientX + second.clientX) / 2;
+      const centerY = (first.clientY + second.clientY) / 2;
+      applyZoom(start.zoom * (touchDistance(first, second) / start.distance), centerX, centerY);
+      return;
+    }
+
+    if (event.touches.length === 1 && zoomGesture.current?.type === 'pan' && !lockedDigit && !eraserMode) {
+      const viewport = zoomViewportRef.current;
+      const touch = event.touches[0];
+      if (!viewport) return;
+      event.preventDefault();
+      viewport.scrollLeft = zoomGesture.current.left - (touch.clientX - zoomGesture.current.x);
+      viewport.scrollTop = zoomGesture.current.top - (touch.clientY - zoomGesture.current.y);
+    }
+  };
+
+  const endZoomGesture = (event: ReactTouchEvent<HTMLDivElement>) => {
+    if (size === 9) return;
+    if (event.touches.length === 0) zoomGesture.current = null;
+    else if (event.touches.length === 1 && zoomRef.current > 1.001 && !lockedDigit && !eraserMode) {
+      const viewport = zoomViewportRef.current;
+      const touch = event.touches[0];
+      if (viewport) zoomGesture.current = { type: 'pan', x: touch.clientX, y: touch.clientY, left: viewport.scrollLeft, top: viewport.scrollTop };
+    } else {
+      zoomGesture.current = null;
+    }
+  };
+
   const boardStyle = {
     '--board-size': size,
     '--local-color': '#3174b8',
     '--remote-color': remoteColor ? playerColorHex[remoteColor] : '#e38445',
   } as CSSProperties;
 
+  const zoomStyle = {
+    '--board-zoom': zoom,
+  } as CSSProperties;
+
   return (
-    <div ref={boardRef} className={`sudoku-board size-${size} ${notesMode ? 'notes-mode' : ''} ${lockedDigit ? 'paint-mode' : ''} ${eraserMode ? 'eraser-mode' : ''}`} style={boardStyle} role="grid" aria-label={eraserMode ? 'Поле судоку. Закреплён ластик' : lockedDigit ? `Поле судоку. Закреплён символ ${symbolForDigit(lockedDigit)}` : 'Поле судоку'} onPointerMove={movePaint} onPointerUp={endPaint} onPointerCancel={endPaint}>
-      {board.map((row, r) => row.map((value, c) => {
-        const isGiven = puzzle[r][c] !== 0;
-        const isSelected = selected?.row === r && selected?.col === c;
-        const isRemote = remoteSelected?.row === r && remoteSelected?.col === c;
-        const isSameValue = Boolean(highlightDigit && value === highlightDigit);
-        const isWrong = Boolean(value && !isGiven && solution[r][c] !== value);
-        const isHintCell = hint?.cell.row === r && hint?.cell.col === c;
-        const currentRegion = regionId(size, r, c);
-        const isSelectionPeer = Boolean(
-          showSelectionPeers
-            && selected
-            && !isSelected
-            && (r === selected.row || c === selected.col),
-        );
-        const key = `${r}:${c}`;
-        const regionRight = c < size - 1 && regionId(size, r, c + 1) !== currentRegion;
-        const regionBottom = r < size - 1 && regionId(size, r + 1, c) !== currentRegion;
-        const classNames = [
-          'sudoku-cell',
-          isGiven ? 'given' : 'editable',
-          isSelectionPeer ? 'selection-peer' : '',
-          isSameValue ? 'same-value' : '',
-          isSelected ? 'selected-local' : '',
-          isRemote ? 'selected-remote' : '',
-          isWrong ? 'wrong' : '',
-          isHintCell ? 'hint-target' : '',
-          hintRelated.has(key) ? 'hint-related' : '',
-          hintStep >= 1 && teaching.blocked.has(key) ? 'hint-blocked' : '',
-          hintStep >= 1 && teaching.sources.has(key) ? 'hint-source' : '',
-          regionRight ? 'region-right' : '',
-          regionBottom ? 'region-bottom' : '',
-          c === size - 1 ? 'last-col' : '',
-          r === size - 1 ? 'last-row' : '',
-        ].filter(Boolean).join(' ');
-        return (
-          <button key={`${r}-${c}`} className={classNames} data-sudoku-cell data-row={r} data-col={c} onClick={(event) => handleKeyboardClick(r, c, event)} onPointerDown={(event) => beginPaint(r, c, event)} role="gridcell" aria-label={`Строка ${r + 1}, столбец ${c + 1}${value ? `, символ ${symbolForDigit(value)}` : ', пусто'}${isGiven ? ', заданный символ' : ''}`}>
-            {value ? <span className="cell-value">{symbolForDigit(value)}</span> : (
-              <span className="notes-grid" style={{ gridTemplateColumns: `repeat(${noteColumns}, 1fr)`, gridTemplateRows: `repeat(${noteRows}, 1fr)` }} aria-label={notes[r][c].length ? `Заметки ${notes[r][c].map(symbolForDigit).join(', ')}` : undefined}>
-                {Array.from({ length: size }, (_, index) => {
-                  const digit = index + 1;
-                  const visible = notes[r][c].includes(digit);
-                  const highlighted = visible && highlightDigit === digit;
-                  return <span key={digit} className={highlighted ? 'note-match' : undefined}>{visible ? symbolForDigit(digit) : ''}</span>;
-                })}
-              </span>
-            )}
-            {isRemote && <span className="remote-dot" aria-hidden="true" />}
-          </button>
-        );
-      }))}
+    <div
+      ref={zoomViewportRef}
+      className={`board-zoom-viewport ${size > 9 ? 'zoomable' : ''} ${zoom > 1.001 ? 'zoomed' : ''}`}
+      style={zoomStyle}
+      onTouchStart={beginZoomGesture}
+      onTouchMove={moveZoomGesture}
+      onTouchEnd={endZoomGesture}
+      onTouchCancel={endZoomGesture}
+    >
+      <div className="board-zoom-canvas">
+        <div ref={boardRef} className={`sudoku-board size-${size} ${notesMode ? 'notes-mode' : ''} ${lockedDigit ? 'paint-mode' : ''} ${eraserMode ? 'eraser-mode' : ''}`} style={boardStyle} role="grid" aria-label={eraserMode ? 'Поле судоку. Закреплён ластик' : lockedDigit ? `Поле судоку. Закреплён символ ${symbolForDigit(lockedDigit)}` : 'Поле судоку'} onPointerMove={movePaint} onPointerUp={endPaint} onPointerCancel={endPaint}>
+          {board.map((row, r) => row.map((value, c) => {
+            const isGiven = puzzle[r][c] !== 0;
+            const isSelected = selected?.row === r && selected?.col === c;
+            const isRemote = remoteSelected?.row === r && remoteSelected?.col === c;
+            const isSameValue = Boolean(highlightDigit && value === highlightDigit);
+            const isWrong = Boolean(value && !isGiven && solution[r][c] !== value);
+            const isHintCell = hint?.cell.row === r && hint?.cell.col === c;
+            const currentRegion = regionId(size, r, c);
+            const isSelectionPeer = Boolean(
+              showSelectionPeers
+                && selected
+                && !isSelected
+                && (r === selected.row || c === selected.col),
+            );
+            const key = `${r}:${c}`;
+            const regionRight = c < size - 1 && regionId(size, r, c + 1) !== currentRegion;
+            const regionBottom = r < size - 1 && regionId(size, r + 1, c) !== currentRegion;
+            const classNames = [
+              'sudoku-cell',
+              isGiven ? 'given' : 'editable',
+              isSelectionPeer ? 'selection-peer' : '',
+              isSameValue ? 'same-value' : '',
+              isSelected ? 'selected-local' : '',
+              isRemote ? 'selected-remote' : '',
+              isWrong ? 'wrong' : '',
+              isHintCell ? 'hint-target' : '',
+              hintRelated.has(key) ? 'hint-related' : '',
+              hintStep >= 1 && teaching.blocked.has(key) ? 'hint-blocked' : '',
+              hintStep >= 1 && teaching.sources.has(key) ? 'hint-source' : '',
+              regionRight ? 'region-right' : '',
+              regionBottom ? 'region-bottom' : '',
+              c === size - 1 ? 'last-col' : '',
+              r === size - 1 ? 'last-row' : '',
+            ].filter(Boolean).join(' ');
+            return (
+              <button key={`${r}-${c}`} className={classNames} data-sudoku-cell data-row={r} data-col={c} onClick={(event) => handleKeyboardClick(r, c, event)} onPointerDown={(event) => beginPaint(r, c, event)} role="gridcell" aria-label={`Строка ${r + 1}, столбец ${c + 1}${value ? `, символ ${symbolForDigit(value)}` : ', пусто'}${isGiven ? ', заданный символ' : ''}`}>
+                {value ? <span className="cell-value">{symbolForDigit(value)}</span> : (
+                  <span className="notes-grid" style={{ gridTemplateColumns: `repeat(${noteColumns}, 1fr)`, gridTemplateRows: `repeat(${noteRows}, 1fr)` }} aria-label={notes[r][c].length ? `Заметки ${notes[r][c].map(symbolForDigit).join(', ')}` : undefined}>
+                    {Array.from({ length: size }, (_, index) => {
+                      const digit = index + 1;
+                      const visible = notes[r][c].includes(digit);
+                      const highlighted = visible && highlightDigit === digit;
+                      return <span key={digit} className={highlighted ? 'note-match' : undefined}>{visible ? symbolForDigit(digit) : ''}</span>;
+                    })}
+                  </span>
+                )}
+                {isRemote && <span className="remote-dot" aria-hidden="true" />}
+              </button>
+            );
+          }))}
+        </div>
+      </div>
     </div>
   );
 });
