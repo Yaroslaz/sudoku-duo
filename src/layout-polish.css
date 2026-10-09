@@ -1,0 +1,125 @@
+/* Large boards: keep every cell perfectly square and zoom only the board area. */
+.reference-game .board-section {
+  overflow: visible;
+}
+
+.reference-game .board-zoom-viewport {
+  width: min(calc(100vw - 16px), 680px, calc(100dvh - 310px));
+  max-width: 100%;
+  aspect-ratio: 1;
+  position: relative;
+  overflow: hidden;
+  margin: 0 auto;
+  background: #fff;
+}
+
+.reference-game .board-zoom-viewport.zoomable {
+  touch-action: none;
+  overscroll-behavior: contain;
+}
+
+.reference-game .board-zoom-viewport.zoomed {
+  overflow: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.reference-game .board-zoom-viewport.zoomed::-webkit-scrollbar {
+  display: none;
+}
+
+.reference-game .board-zoom-canvas {
+  width: calc(100% * var(--board-zoom, 1));
+  aspect-ratio: 1;
+  min-width: 100%;
+}
+
+.reference-game .board-zoom-canvas .sudoku-board {
+  width: 100% !important;
+  height: 100%;
+  max-width: none !important;
+  grid-template-columns: repeat(var(--board-size), minmax(0, 1fr)) !important;
+  grid-template-rows: repeat(var(--board-size), minmax(0, 1fr)) !important;
+  grid-auto-rows: minmax(0, 1fr);
+}
+
+.reference-game .board-zoom-canvas .sudoku-cell {
+  min-width: 0;
+  min-height: 0;
+  aspect-ratio: 1;
+}
+
+/* Notes mode changes the tool state, not the shape of the digit strip. */
+.reference-game .number-pad-wrap.notes-active .number-glyph {
+  width: 44px;
+  height: 44px;
+  border-radius: 0;
+  background: transparent;
+  background-image: none;
+  font-size: clamp(2rem, 8.5vw, 3.3rem);
+}
+
+.reference-game .number-pad-wrap.notes-active .number-button::after {
+  display: none !important;
+}
+
+.reference-game .number-pad-wrap.notes-active .number-button.locked .number-glyph {
+  border-radius: 50%;
+  background: #316ab1;
+  color: #fff;
+  font-size: clamp(1.55rem, 6.5vw, 2.35rem);
+}
+
+/* QR steps should behave like a single-screen handoff, not a scrollable form. */
+.pairing-screen:has(.compact-qr-shell) {
+  height: 100dvh;
+  min-height: 100dvh;
+  overflow: hidden;
+  padding-top: max(10px, var(--safe-top));
+  padding-bottom: max(10px, var(--safe-bottom));
+}
+
+.pairing-screen:has(.compact-qr-shell) > .mantine-Stack-root {
+  height: 100%;
+  gap: clamp(8px, 1.7dvh, 16px) !important;
+}
+
+/* The explanatory sentence is available on the preceding step; remove it here
+   to keep the actual hand-off on one screen. */
+.pairing-screen:has(.compact-qr-shell) > .mantine-Stack-root > .mantine-Stack-root:has(h2) > .mantine-Text-root {
+  display: none;
+}
+
+.pairing-screen:has(.compact-qr-shell) .compact-qr-shell {
+  flex: 0 0 auto;
+}
+
+.pairing-screen:has(.compact-qr-shell) .compact-qr-shell img {
+  display: block;
+}
+
+.pairing-screen:has(.compact-qr-shell) .mantine-Alert-root {
+  margin-top: 0;
+}
+
+@media (max-height: 760px) {
+  .reference-game .board-zoom-viewport {
+    width: min(calc(100vw - 16px), 680px, calc(100dvh - 270px));
+  }
+
+  .pairing-screen:has(.compact-qr-shell) .compact-qr-shell img {
+    width: min(64vw, 270px) !important;
+    height: min(64vw, 270px) !important;
+  }
+
+  .pairing-screen:has(.compact-qr-shell) .mantine-Alert-root {
+    display: none;
+  }
+}
+
+@media (max-height: 680px) {
+  .pairing-screen:has(.compact-qr-shell) .compact-qr-shell img {
+    width: min(56vw, 235px) !important;
+    height: min(56vw, 235px) !important;
+  }
+}
