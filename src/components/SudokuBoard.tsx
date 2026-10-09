@@ -1,17 +1,19 @@
-import { memo, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type TouchEvent as ReactTouchEvent } from 'react';
+import { memo, useEffect, useMemo, useRef, type CSSProperties, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type TouchEvent as ReactTouchEvent } from 'react';
 import { playerColorHex } from '../game/playerColors';
 import { candidates, regionCells, regionId, symbolForDigit } from '../game/engine';
 import type { Board, BoardSize, Coordinate, Digit, Hint, NotesGrid, PlayerColor } from '../game/types';
 
 type PaintMode = 'add' | 'erase';
 
+type BoardTransform = { zoom: number; x: number; y: number };
 type ZoomGesture =
-  | { type: 'pinch'; distance: number; zoom: number }
-  | { type: 'pan'; x: number; y: number; left: number; top: number }
+  | { type: 'pinch'; distance: number; zoom: number; contentX: number; contentY: number }
+  | { type: 'pan'; startX: number; startY: number; x: number; y: number; moved: boolean }
   | null;
 
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 2.8;
+const PAN_THRESHOLD_PX = 5;
 
 export const SudokuBoard = memo(function SudokuBoard({
   puzzle,
@@ -51,9 +53,12 @@ export const SudokuBoard = memo(function SudokuBoard({
   const size = board.length as BoardSize;
   const boardRef = useRef<HTMLDivElement>(null);
   const zoomViewportRef = useRef<HTMLDivElement>(null);
-  const zoomRef = useRef(1);
+  const zoomCanvasRef = useRef<HTMLDivElement>(null);
+  const boardTransform = useRef<BoardTransform>({ zoom: 1, x: 0, y: 0 });
   const zoomGesture = useRef<ZoomGesture>(null);
-  const [zoom, setZoom] = useState(1);
+  const suppressCellClick = useRef(false);
+  const suppressTimer = useRef<number | null>(null);
+  const touchActionClick = useRef(false);
   const painting = useRef(false);
   const gesture = useRef<'digit' | 'eraser' | null>(null);
   const paintMode = useRef<PaintMode>('add');
@@ -71,19 +76,37 @@ export const SudokuBoard = memo(function SudokuBoard({
       && !eraserMode,
   );
 
-  useEffect(() => {
-    zoomRef.current = zoom;
-  }, [zoom]);
+  const applyBoardTransform = (zoom: number, x: number, y: number) => {
+    const viewport = zoomViewportRef.current;
+    const canvas = zoomCanvasRef.current;
+    if (!viewport || !canvas) return;
+
+    const clampedZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom));
+    const width = viewport.clientWidth;
+    const height = viewport.clientHeight;
+    const minX = Math.min(0, width - width * clampedZoom);
+    const minY = Math.min(0, height - height * clampedZoom);
+    const clampedX = clampedZoom <= 1.001 ? 0 : Math.min(0, Math.max(minX, x));
+    const clampedY = clampedZoom <= 1.001 ? 0 : Math.min(0, Math.max(minY, y));
+
+    boardTransform.current = { zoom: clampedZoom, x: clampedX, y: clampedY };
+    canvas.style.transform = `translate3d(${clampedX}px, ${clampedY}px, 0) scale(${clampedZoom})`;
+    viewport.classList.toggle('zoomed', clampedZoom > 1.001);
+  };
 
   useEffect(() => {
-    zoomRef.current = 1;
-    setZoom(1);
+    boardTransform.current = { zoom: 1, x: 0, y: 0 };
     zoomGesture.current = null;
-    if (zoomViewportRef.current) {
-      zoomViewportRef.current.scrollLeft = 0;
-      zoomViewportRef.current.scrollTop = 0;
-    }
+    suppressCellClick.current = false;
+    touchActionClick.current = false;
+    if (suppressTimer.current !== null) window.clearTimeout(suppressTimer.current);
+    suppressTimer.current = null;
+    applyBoardTransform(1, 0, 0);
   }, [size]);
+
+  useEffect(() => () => {
+    if (suppressTimer.current !== null) window.clearTimeout(suppressTimer.current);
+  }, []);
 
   const teaching = useMemo(() => {
     const blocked = new Set<string>();
@@ -148,6 +171,15 @@ export const SudokuBoard = memo(function SudokuBoard({
 
   const beginPaint = (row: number, col: number, event: ReactPointerEvent<HTMLButtonElement>) => {
     if (puzzle[row][col] !== 0 || (!eraserMode && !lockedDigit)) return;
+
+    // On large touch boards wait for the click before writing. This gives the
+    // second finger time to turn the gesture into a pinch without placing a
+    // digit/erasing the cell touched first.
+    if (size > 9 && event.pointerType === 'touch') {
+      touchActionClick.current = true;
+      return;
+    }
+
     event.preventDefault();
     painting.current = true;
     activePointer.current = event.pointerId;
@@ -187,7 +219,24 @@ export const SudokuBoard = memo(function SudokuBoard({
   };
 
   const handleKeyboardClick = (row: number, col: number, event: ReactMouseEvent<HTMLButtonElement>) => {
+    if (suppressCellClick.current) {
+      event.preventDefault();
+      touchActionClick.current = false;
+      return;
+    }
+
     if (event.detail !== 0) {
+      if (touchActionClick.current) {
+        touchActionClick.current = false;
+        if (puzzle[row][col] !== 0) return;
+        if (eraserMode) return onEraseCell(row, col);
+        if (lockedDigit) {
+          const mode: PaintMode = notesMode
+            ? notes[row][col].includes(lockedDigit) ? 'erase' : 'add'
+            : board[row][col] === lockedDigit ? 'erase' : 'add';
+          return onPaintCell(row, col, mode);
+        }
+      }
       if (!eraserMode && !lockedDigit) onSelect(row, col);
       return;
     }
@@ -201,79 +250,126 @@ export const SudokuBoard = memo(function SudokuBoard({
 
   const touchDistance = (first: ReactTouchEvent<HTMLDivElement>['touches'][number], second: ReactTouchEvent<HTMLDivElement>['touches'][number]) => Math.hypot(second.clientX - first.clientX, second.clientY - first.clientY);
 
-  const applyZoom = (nextZoom: number, clientX: number, clientY: number) => {
+  const suppressClicksForGesture = () => {
+    suppressCellClick.current = true;
+    touchActionClick.current = false;
+    endPaint();
+    if (suppressTimer.current !== null) {
+      window.clearTimeout(suppressTimer.current);
+      suppressTimer.current = null;
+    }
+  };
+
+  const releaseGestureSuppressionSoon = () => {
+    if (suppressTimer.current !== null) window.clearTimeout(suppressTimer.current);
+    suppressTimer.current = window.setTimeout(() => {
+      suppressCellClick.current = false;
+      suppressTimer.current = null;
+    }, 240);
+  };
+
+  const beginPinch = (event: ReactTouchEvent<HTMLDivElement>) => {
     const viewport = zoomViewportRef.current;
-    if (!viewport) return;
-    const previousZoom = zoomRef.current;
-    const clamped = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, nextZoom));
+    if (!viewport || event.touches.length < 2) return;
+    const first = event.touches[0];
+    const second = event.touches[1];
     const rect = viewport.getBoundingClientRect();
-    const localX = clientX - rect.left;
-    const localY = clientY - rect.top;
-    const contentX = (viewport.scrollLeft + localX) / previousZoom;
-    const contentY = (viewport.scrollTop + localY) / previousZoom;
-    zoomRef.current = clamped;
-    setZoom(clamped);
-    requestAnimationFrame(() => {
-      viewport.scrollLeft = contentX * clamped - localX;
-      viewport.scrollTop = contentY * clamped - localY;
-    });
+    const centerX = (first.clientX + second.clientX) / 2 - rect.left;
+    const centerY = (first.clientY + second.clientY) / 2 - rect.top;
+    const current = boardTransform.current;
+    zoomGesture.current = {
+      type: 'pinch',
+      distance: touchDistance(first, second),
+      zoom: current.zoom,
+      contentX: (centerX - current.x) / current.zoom,
+      contentY: (centerY - current.y) / current.zoom,
+    };
+    suppressClicksForGesture();
   };
 
   const beginZoomGesture = (event: ReactTouchEvent<HTMLDivElement>) => {
     if (size === 9) return;
     if (event.touches.length >= 2) {
-      const first = event.touches[0];
-      const second = event.touches[1];
-      zoomGesture.current = { type: 'pinch', distance: touchDistance(first, second), zoom: zoomRef.current };
+      beginPinch(event);
       event.preventDefault();
       return;
     }
-    if (event.touches.length === 1 && zoomRef.current > 1.001 && !lockedDigit && !eraserMode) {
-      const viewport = zoomViewportRef.current;
+    if (event.touches.length === 1 && boardTransform.current.zoom > 1.001) {
       const touch = event.touches[0];
-      if (viewport) {
-        zoomGesture.current = { type: 'pan', x: touch.clientX, y: touch.clientY, left: viewport.scrollLeft, top: viewport.scrollTop };
-      }
+      const current = boardTransform.current;
+      zoomGesture.current = {
+        type: 'pan',
+        startX: touch.clientX,
+        startY: touch.clientY,
+        x: current.x,
+        y: current.y,
+        moved: false,
+      };
     }
   };
 
   const moveZoomGesture = (event: ReactTouchEvent<HTMLDivElement>) => {
     if (size === 9) return;
+
     if (event.touches.length >= 2) {
+      if (zoomGesture.current?.type !== 'pinch') beginPinch(event);
+      const start = zoomGesture.current;
+      if (!start || start.type !== 'pinch' || start.distance <= 0) return;
+      const viewport = zoomViewportRef.current;
+      if (!viewport) return;
       const first = event.touches[0];
       const second = event.touches[1];
-      if (zoomGesture.current?.type !== 'pinch') {
-        zoomGesture.current = { type: 'pinch', distance: touchDistance(first, second), zoom: zoomRef.current };
-      }
-      const start = zoomGesture.current;
-      if (start.type !== 'pinch' || start.distance <= 0) return;
+      const rect = viewport.getBoundingClientRect();
+      const centerX = (first.clientX + second.clientX) / 2 - rect.left;
+      const centerY = (first.clientY + second.clientY) / 2 - rect.top;
+      const nextZoom = start.zoom * (touchDistance(first, second) / start.distance);
+      const clampedZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, nextZoom));
+      const nextX = centerX - start.contentX * clampedZoom;
+      const nextY = centerY - start.contentY * clampedZoom;
+      suppressClicksForGesture();
       event.preventDefault();
-      const centerX = (first.clientX + second.clientX) / 2;
-      const centerY = (first.clientY + second.clientY) / 2;
-      applyZoom(start.zoom * (touchDistance(first, second) / start.distance), centerX, centerY);
+      applyBoardTransform(clampedZoom, nextX, nextY);
       return;
     }
 
-    if (event.touches.length === 1 && zoomGesture.current?.type === 'pan' && !lockedDigit && !eraserMode) {
-      const viewport = zoomViewportRef.current;
+    if (event.touches.length === 1 && zoomGesture.current?.type === 'pan') {
       const touch = event.touches[0];
-      if (!viewport) return;
+      const pan = zoomGesture.current;
+      const dx = touch.clientX - pan.startX;
+      const dy = touch.clientY - pan.startY;
+      if (!pan.moved && Math.hypot(dx, dy) < PAN_THRESHOLD_PX) return;
+      pan.moved = true;
+      suppressClicksForGesture();
       event.preventDefault();
-      viewport.scrollLeft = zoomGesture.current.left - (touch.clientX - zoomGesture.current.x);
-      viewport.scrollTop = zoomGesture.current.top - (touch.clientY - zoomGesture.current.y);
+      applyBoardTransform(boardTransform.current.zoom, pan.x + dx, pan.y + dy);
     }
   };
 
   const endZoomGesture = (event: ReactTouchEvent<HTMLDivElement>) => {
     if (size === 9) return;
-    if (event.touches.length === 0) zoomGesture.current = null;
-    else if (event.touches.length === 1 && zoomRef.current > 1.001 && !lockedDigit && !eraserMode) {
-      const viewport = zoomViewportRef.current;
-      const touch = event.touches[0];
-      if (viewport) zoomGesture.current = { type: 'pan', x: touch.clientX, y: touch.clientY, left: viewport.scrollLeft, top: viewport.scrollTop };
-    } else {
+    const finished = zoomGesture.current;
+
+    if (event.touches.length === 0) {
       zoomGesture.current = null;
+      if (finished?.type === 'pinch' || (finished?.type === 'pan' && finished.moved)) releaseGestureSuppressionSoon();
+      return;
     }
+
+    if (event.touches.length === 1 && boardTransform.current.zoom > 1.001) {
+      const touch = event.touches[0];
+      const current = boardTransform.current;
+      zoomGesture.current = {
+        type: 'pan',
+        startX: touch.clientX,
+        startY: touch.clientY,
+        x: current.x,
+        y: current.y,
+        moved: false,
+      };
+      return;
+    }
+
+    zoomGesture.current = null;
   };
 
   const boardStyle = {
@@ -282,21 +378,16 @@ export const SudokuBoard = memo(function SudokuBoard({
     '--remote-color': remoteColor ? playerColorHex[remoteColor] : '#e38445',
   } as CSSProperties;
 
-  const zoomStyle = {
-    '--board-zoom': zoom,
-  } as CSSProperties;
-
   return (
     <div
       ref={zoomViewportRef}
-      className={`board-zoom-viewport ${size > 9 ? 'zoomable' : ''} ${zoom > 1.001 ? 'zoomed' : ''}`}
-      style={zoomStyle}
+      className={`board-zoom-viewport ${size > 9 ? 'zoomable' : ''}`}
       onTouchStart={beginZoomGesture}
       onTouchMove={moveZoomGesture}
       onTouchEnd={endZoomGesture}
       onTouchCancel={endZoomGesture}
     >
-      <div className="board-zoom-canvas">
+      <div ref={zoomCanvasRef} className="board-zoom-canvas">
         <div ref={boardRef} className={`sudoku-board size-${size} ${notesMode ? 'notes-mode' : ''} ${lockedDigit ? 'paint-mode' : ''} ${eraserMode ? 'eraser-mode' : ''}`} style={boardStyle} role="grid" aria-label={eraserMode ? 'Поле судоку. Закреплён ластик' : lockedDigit ? `Поле судоку. Закреплён символ ${symbolForDigit(lockedDigit)}` : 'Поле судоку'} onPointerMove={movePaint} onPointerUp={endPaint} onPointerCancel={endPaint}>
           {board.map((row, r) => row.map((value, c) => {
             const isGiven = puzzle[r][c] !== 0;
