@@ -8,6 +8,7 @@ import './records.css';
 import './input-fixes.css';
 import './icon-polish.css';
 import './ui-polish.css';
+import './layout-polish.css';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
