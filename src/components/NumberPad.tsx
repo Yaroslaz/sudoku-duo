@@ -107,13 +107,16 @@ export function NumberPad({ size, notesMode, eraserMode, hintActive, disabled, r
   };
 
   const handleDigitClick = (digit: Digit) => {
-    onActiveDigit(digit);
     if (longPressFired.current && heldDigit.current === digit) {
       longPressFired.current = false;
       heldDigit.current = null;
       return;
     }
+    // While a symbol is locked, simple taps on the strip must not switch the
+    // highlighted symbol or write a different one. A long press is the only
+    // way to deliberately change/remove the lock.
     if (lockedDigit !== null) return;
+    onActiveDigit(digit);
     onDigit(digit);
   };
 
@@ -165,7 +168,7 @@ export function NumberPad({ size, notesMode, eraserMode, hintActive, disabled, r
             <button
               key={digit}
               type="button"
-              className={`number-button pressable-control ${completed ? 'completed' : ''} ${locked ? 'locked' : ''} ${active ? 'active' : ''} ${notesMode ? 'note-number' : ''}`}
+              className={`number-button pressable-control ${completed ? 'completed' : ''} ${locked ? 'locked' : ''} ${active ? 'active' : ''}`}
               disabled={disabled || completed}
               aria-hidden={completed || undefined}
               tabIndex={completed ? -1 : undefined}
