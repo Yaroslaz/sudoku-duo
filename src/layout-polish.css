@@ -165,6 +165,17 @@
   opacity: .92;
 }
 
+/* A locked note is intentionally monochrome so it reads as a note tool state,
+   not as the normal blue digit-input state. */
+.reference-game .number-pad-wrap.notes-active .number-button.locked::before {
+  background: #68717d;
+  box-shadow: 0 3px 10px rgba(65, 72, 82, .18);
+}
+
+.reference-game .number-pad-wrap.notes-active .number-button.locked .number-glyph {
+  color: #fff !important;
+}
+
 /* When a symbol is locked, make every other available symbol recede. */
 .reference-game.locked-mode-active .number-button:not(.locked):not(.completed) .number-glyph {
   color: #9198a2 !important;
