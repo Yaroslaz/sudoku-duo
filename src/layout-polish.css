@@ -51,16 +51,21 @@
   aspect-ratio: 1;
 }
 
-/* Digit-strip states. Keep the actual button transparent and draw every
-   selection state as a dedicated circular layer, so no square flash can leak
-   through while pressing/focusing a number. */
+/* Number pad geometry: the glyph and its circular state layer share exactly
+   the same grid center. This avoids font/inline metrics shifting the circle on
+   mobile Chromium. */
 .reference-game .number-button,
 .reference-game .number-button:hover,
 .reference-game .number-button:focus,
 .reference-game .number-button:active {
+  display: grid !important;
+  place-items: center !important;
+  align-content: center !important;
+  justify-content: center !important;
   background: transparent !important;
   box-shadow: none !important;
   -webkit-tap-highlight-color: transparent;
+  line-height: 1 !important;
 }
 
 .reference-game .number-button:focus:not(:focus-visible) {
@@ -72,13 +77,15 @@
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 44px;
-  height: 44px;
+  width: 46px;
+  height: 46px;
+  margin: 0;
   border-radius: 50%;
   background: transparent;
   box-shadow: none;
   opacity: 0;
-  transform: translate(-50%, -50%) scale(.9);
+  transform: translate3d(-50%, -50%, 0) scale(.92);
+  transform-origin: center;
   transition: opacity 120ms ease-out, transform 120ms ease-out, background-color 120ms ease-out, box-shadow 120ms ease-out;
   pointer-events: none;
 }
@@ -89,21 +96,28 @@
 .reference-game .number-button:not(:disabled):active .number-glyph {
   position: relative;
   z-index: 1;
-  width: 44px;
-  height: 44px;
+  display: grid !important;
+  place-items: center !important;
+  width: 46px !important;
+  height: 46px !important;
+  margin: 0 !important;
+  padding: 0 !important;
   border-radius: 50% !important;
   background: transparent !important;
   background-image: none !important;
   box-shadow: none !important;
   overflow: visible;
+  text-align: center;
+  text-indent: 0;
   font-size: clamp(2rem, 8.5vw, 3.3rem);
+  line-height: 1 !important;
   transition: color 120ms ease-out, opacity 120ms ease-out, font-size 120ms ease-out;
 }
 
 .reference-game .number-button.active:not(.locked)::before,
 .reference-game .number-button:not(:disabled):active:not(.locked)::before {
   opacity: 1;
-  transform: translate(-50%, -50%) scale(1);
+  transform: translate3d(-50%, -50%, 0) scale(1);
   background: #eaf2fb;
   box-shadow: inset 0 0 0 1px rgba(49, 106, 177, .11);
 }
@@ -115,7 +129,7 @@
 
 .reference-game .number-button.locked::before {
   opacity: 1;
-  transform: translate(-50%, -50%) scale(1);
+  transform: translate3d(-50%, -50%, 0) scale(1);
   background: #316ab1;
   box-shadow: 0 3px 10px rgba(49, 106, 177, .22);
 }
@@ -126,14 +140,16 @@
   opacity: 1 !important;
 }
 
-/* Notes mode should feel quieter: symbols stay full-size but become neutral. */
+/* Notes mode should feel quieter: symbols stay the same size but become more
+   neutral. There are no little status dots under the symbols. */
 .reference-game .number-pad-wrap.notes-active .number-button::after {
   display: none !important;
+  content: none !important;
 }
 
 .reference-game .number-pad-wrap.notes-active .number-button:not(.locked) .number-glyph {
-  color: #7b8490 !important;
-  opacity: .72;
+  color: #7f8792 !important;
+  opacity: .56;
   font-size: clamp(2rem, 8.5vw, 3.3rem);
 }
 
@@ -145,14 +161,14 @@
 
 .reference-game .number-pad-wrap.notes-active .number-button.active:not(.locked) .number-glyph,
 .reference-game .number-pad-wrap.notes-active .number-button:not(:disabled):active:not(.locked) .number-glyph {
-  color: #5f6976 !important;
-  opacity: .95;
+  color: #596371 !important;
+  opacity: .92;
 }
 
-/* When a symbol is locked, make the rest recede so the active tool is obvious. */
+/* When a symbol is locked, make every other available symbol recede. */
 .reference-game.locked-mode-active .number-button:not(.locked):not(.completed) .number-glyph {
-  color: #8b929c !important;
-  opacity: .30;
+  color: #9198a2 !important;
+  opacity: .20;
 }
 
 .reference-game.locked-mode-active .number-button:not(.locked)::before {
