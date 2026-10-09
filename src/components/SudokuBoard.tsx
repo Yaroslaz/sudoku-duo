@@ -14,6 +14,7 @@ type ZoomGesture =
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 2.8;
 const PAN_THRESHOLD_PX = 5;
+const GESTURE_CLICK_GUARD_MS = 700;
 
 export const SudokuBoard = memo(function SudokuBoard({
   puzzle,
@@ -55,6 +56,8 @@ export const SudokuBoard = memo(function SudokuBoard({
   const zoomViewportRef = useRef<HTMLDivElement>(null);
   const zoomCanvasRef = useRef<HTMLDivElement>(null);
   const boardTransform = useRef<BoardTransform>({ zoom: 1, x: 0, y: 0 });
+  const pendingTransform = useRef<BoardTransform | null>(null);
+  const transformFrame = useRef<number | null>(null);
   const zoomGesture = useRef<ZoomGesture>(null);
   const suppressCellClick = useRef(false);
   const suppressTimer = useRef<number | null>(null);
@@ -78,8 +81,7 @@ export const SudokuBoard = memo(function SudokuBoard({
 
   const applyBoardTransform = (zoom: number, x: number, y: number) => {
     const viewport = zoomViewportRef.current;
-    const canvas = zoomCanvasRef.current;
-    if (!viewport || !canvas) return;
+    if (!viewport) return;
 
     const clampedZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom));
     const width = viewport.clientWidth;
@@ -88,14 +90,28 @@ export const SudokuBoard = memo(function SudokuBoard({
     const minY = Math.min(0, height - height * clampedZoom);
     const clampedX = clampedZoom <= 1.001 ? 0 : Math.min(0, Math.max(minX, x));
     const clampedY = clampedZoom <= 1.001 ? 0 : Math.min(0, Math.max(minY, y));
+    const next = { zoom: clampedZoom, x: clampedX, y: clampedY };
 
-    boardTransform.current = { zoom: clampedZoom, x: clampedX, y: clampedY };
-    canvas.style.transform = `translate3d(${clampedX}px, ${clampedY}px, 0) scale(${clampedZoom})`;
-    viewport.classList.toggle('zoomed', clampedZoom > 1.001);
+    boardTransform.current = next;
+    pendingTransform.current = next;
+    if (transformFrame.current !== null) return;
+
+    transformFrame.current = window.requestAnimationFrame(() => {
+      const canvas = zoomCanvasRef.current;
+      const activeViewport = zoomViewportRef.current;
+      const pending = pendingTransform.current;
+      transformFrame.current = null;
+      if (!canvas || !activeViewport || !pending) return;
+      const tx = Math.round(pending.x * 10) / 10;
+      const ty = Math.round(pending.y * 10) / 10;
+      canvas.style.transform = `translate3d(${tx}px, ${ty}px, 0) scale(${pending.zoom})`;
+      activeViewport.classList.toggle('zoomed', pending.zoom > 1.001);
+    });
   };
 
   useEffect(() => {
     boardTransform.current = { zoom: 1, x: 0, y: 0 };
+    pendingTransform.current = null;
     zoomGesture.current = null;
     suppressCellClick.current = false;
     touchActionClick.current = false;
@@ -106,6 +122,7 @@ export const SudokuBoard = memo(function SudokuBoard({
 
   useEffect(() => () => {
     if (suppressTimer.current !== null) window.clearTimeout(suppressTimer.current);
+    if (transformFrame.current !== null) window.cancelAnimationFrame(transformFrame.current);
   }, []);
 
   const teaching = useMemo(() => {
@@ -176,7 +193,7 @@ export const SudokuBoard = memo(function SudokuBoard({
     // second finger time to turn the gesture into a pinch without placing a
     // digit/erasing the cell touched first.
     if (size > 9 && event.pointerType === 'touch') {
-      touchActionClick.current = true;
+      touchActionClick.current = !suppressCellClick.current;
       return;
     }
 
@@ -265,7 +282,7 @@ export const SudokuBoard = memo(function SudokuBoard({
     suppressTimer.current = window.setTimeout(() => {
       suppressCellClick.current = false;
       suppressTimer.current = null;
-    }, 240);
+    }, GESTURE_CLICK_GUARD_MS);
   };
 
   const beginPinch = (event: ReactTouchEvent<HTMLDivElement>) => {
@@ -292,6 +309,7 @@ export const SudokuBoard = memo(function SudokuBoard({
     if (event.touches.length >= 2) {
       beginPinch(event);
       event.preventDefault();
+      event.stopPropagation();
       return;
     }
     if (event.touches.length === 1 && boardTransform.current.zoom > 1.001) {
@@ -328,6 +346,7 @@ export const SudokuBoard = memo(function SudokuBoard({
       const nextY = centerY - start.contentY * clampedZoom;
       suppressClicksForGesture();
       event.preventDefault();
+      event.stopPropagation();
       applyBoardTransform(clampedZoom, nextX, nextY);
       return;
     }
@@ -341,17 +360,18 @@ export const SudokuBoard = memo(function SudokuBoard({
       pan.moved = true;
       suppressClicksForGesture();
       event.preventDefault();
+      event.stopPropagation();
       applyBoardTransform(boardTransform.current.zoom, pan.x + dx, pan.y + dy);
     }
   };
 
   const endZoomGesture = (event: ReactTouchEvent<HTMLDivElement>) => {
     if (size === 9) return;
-    const finished = zoomGesture.current;
 
     if (event.touches.length === 0) {
       zoomGesture.current = null;
-      if (finished?.type === 'pinch' || (finished?.type === 'pan' && finished.moved)) releaseGestureSuppressionSoon();
+      touchActionClick.current = false;
+      if (suppressCellClick.current) releaseGestureSuppressionSoon();
       return;
     }
 
